@@ -8,11 +8,11 @@ Private bidder identity and private payout routing. Public settlement outcome.
 
 A single-item, single-round, sealed-bid auction that settles at the second-highest price.
 
-Bidders act through private sub-accounts created by the app through the STRK20 Privacy SDK, so no public on-chain link points back to their main wallet. Each bidder submits a Poseidon commitment to their bid rather than the bid itself, and escrows a collateral amount that is identical for every bidder. After the auction closes, bidders reveal. The highest valid bid wins and pays the second-highest valid bid, or the reserve price if only one bid was valid.
+A bid is funded straight out of a bidder's shielded STRK20 balance: the pool moves the collateral to the auction contract and calls it, in one transaction submitted by a relayer, so no bidder-controlled address appears in the commit at all. Each bidder submits a Poseidon commitment to their bid rather than the bid itself, and escrows a collateral amount that is identical for every bidder. After the auction closes, bidders reveal. The highest valid bid wins and pays the second-highest valid bid, or the reserve price if only one bid was valid.
 
 Two properties are engineered separately, because conflating them is how this kind of design fails:
 
-- **Who is bidding** is hidden by STRK20 private sub-accounts.
+- **Who is bidding** is hidden by the STRK20 pool. The commit's on-chain caller is the pool itself.
 - **What they bid** is hidden by the commitment scheme and by the uniform collateral.
 
 The uniform collateral is the part that is easy to get wrong. If each bidder escrowed an amount proportional to their bid, the public ERC20 transfer would leak the bid before anyone revealed anything. Every bidder therefore escrows exactly the same amount, and bids are capped at that amount.
@@ -25,16 +25,16 @@ Stated plainly, including the parts that leak. The full version lives in `docs/P
 
 **Hidden:** which real person is behind any bidder, and every bid amount until that bidder reveals it.
 
-**Visible:** that the auction exists, the reserve price, the collateral amount, the number of commitments and the timing of each, the sender address of every commit transaction, the ERC20 source of every collateral transfer, every revealed amount once the reveal window opens, the clearing price, each claim amount, and each payout address once claimed.
+**Visible:** that the auction exists, the reserve price, the collateral amount, the number of commitments and the timing of each, the pool as the source of every collateral transfer, every revealed amount once the reveal window opens, the clearing price, each claim amount, and each payout address once claimed.
 
-**What unlinkability does and does not mean here.** The chain can absolutely associate a sub-account with a position. Every commit has a visible sender. What the design provides is that the sub-account carries no public on-chain link back to the bidder's main wallet, which is precisely what the sub-account primitive offers and nothing more. Sealed does not claim a position cannot be tracked. It claims a position cannot be traced to a person.
+**What unlinkability does and does not mean here.** The commit carries no bidder address, because the pool is its caller and a rotating relayer submits it. The chain sees the pool funding an entry and cannot see which shielded balance paid. This rests entirely on the pool's anonymity set: a bidder who shields moments before bidding, or bids while nobody else is using the pool, gets much less than this. Sealed does not claim a position cannot be tracked. It claims a position cannot be traced to a person, as far as the pool carries it.
 
 Known limits:
 
 - Bids cannot exceed the collateral.
-- Funding a sub-account immediately before committing creates a timing link. The interface warns about this.
+- Shielding immediately before committing creates a timing link. The interface warns about this.
 - After the reveal window opens, all revealed bids are public. That is what a sealed-bid auction promises offline, and nothing more.
-- Claim amounts are visible, so after settlement the winner's claiming sub-account is identifiable as the winner's. It remains unlinked to a main wallet.
+- Claim amounts are visible, so after settlement the winning payout address is identifiable as the winner's. It remains unlinked to a main wallet if it is re-shielded.
 - Sealed settles money, not delivery. The contract has no view of whether the seller ships the item.
 
 Determining a winner without any bid ever being revealed would need a ZK circuit proving the winning bid was highest and the clearing price second-highest without disclosing either. STRK20 does not provide that automatically. It is documented as future work and is not attempted this sprint.
@@ -47,36 +47,40 @@ The pool handles identity and value transport. The auction contract handles cust
 main wallet
     |  shield, well ahead of the auction
     v
-STRK20 pool ---- private transfer ----> private sub-account
-                                              |
-                                              |  ERC20 transfer_from, uniform collateral
-                                              v
-                                     Sealed auction contract
-                                              |  settle, then per-entry claim
-                                              v
-                                        private sub-account
-                                              |  re-shield
-                                              v
-                                         STRK20 pool
+STRK20 pool
+    |
+    |  ONE transaction, submitted by a relayer:
+    |    withdraw  uniform collateral -> auction contract
+    |    invoke    auction.privacy_invoke(bid_commitment, claim_handle)
+    v
+Sealed auction contract        ordinary ERC20 custody
+    |  settle, then per-entry claim to the address
+    |  committed inside claim_handle
+    v
+fresh payout account
+    |  re-shield
+    v
+STRK20 pool
 ```
 
 `settle` moves no money. It records the winner and the clearing price. All value leaves through individual `claim` calls, each authorised by a secret whose payout address was committed in advance.
 
 ## Build status
 
-Day 1 of 17. Nothing is deployed yet.
+Day 2 of 17. Nothing is deployed yet.
 
 | Piece | Status |
 | --- | --- |
 | Architecture and scope locked | Done, `docs/ARCHITECTURE.md` |
 | Repository, license, registration | Done |
-| Toolchain pinned, Poseidon parity between Cairo and starknet.js | Not started |
-| Day 3 gate: an SDK-route sub-account calls our contract and transfers tokens in | Not started |
-| Auction contract: commit, reveal, settle, claim | Not started |
-| snforge tests covering all twelve invariants | Not started |
-| Frontend, SDK wiring, secret backup | Not started |
+| Toolchain pinned, Scarb 2.20.0 and snforge 0.63.0 | Done |
+| Poseidon parity between Cairo and starknet.js | Done, shared fixture asserted on both sides |
+| Auction contract: commit, privacy_invoke, reveal, settle, claim | Done, 293 lines |
+| snforge tests covering all twelve invariants | Done, 31 passing, 2 fuzzed |
+| Day 3 gate: a composed withdraw plus privacy_invoke funds a commitment on Sepolia | Not started |
+| Frontend, wallet wiring, secret backup | Not started |
 | Mainnet deployment and a live auction | Not started |
-| PRIVACY.md, MECHANISM.md, HELPER_CUSTODY.md, demo video | Not started |
+| PRIVACY.md, MECHANISM.md, demo video | Not started, `HELPER_CUSTODY.md` done |
 
 Mainnet transaction hashes and deployed contract addresses will appear in `strk20.json` and in this section as they land.
 

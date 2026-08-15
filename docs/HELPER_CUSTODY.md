@@ -1,8 +1,12 @@
 # Helper custody: findings, and a proposed change
 
-**Status: proposed, not adopted.** This changes a non-negotiable in `CLAUDE.md`
-and section 0 of `ARCHITECTURE.md`, so it needs an explicit instruction before
-any code moves. Nothing in `contracts/` has been changed.
+**Status: adopted 15 August 2026.** `CLAUDE.md` and `ARCHITECTURE.md` section 0
+have been updated. Implemented in `contracts/src/auction.cairo`, with 31 tests
+passing, including a conservation fuzzer that picks each bidder's funding path
+from the fuzz input.
+
+Sections 3 to 9 below describe what was built. Section 10 is kept as the record
+of the decision.
 
 Written 15 August 2026, day 2 of the sprint, with the auction contract complete
 and 24 tests green.

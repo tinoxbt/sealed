@@ -21,7 +21,7 @@ Do not change these without an explicit instruction. They are scope decisions, n
 - **Zero valid reveals settles with no winner** and the seller claims the entire pot, since every entry is forfeited.
 - **The contract never stores a bidder address.** Entries are keyed by `claim_handle` only. A `ContractAddress` field in `Entry` creates a public depositor-to-position map and destroys the privacy property. This is a bug, not an optimisation.
 - **Settle moves no money.** It records winner and clearing price. All value leaves through individual `claim` calls.
-- **No `privacy_invoke` custody in v1.** Multi-user custody in a single helper is not an established primitive and the docs say helpers should not hold user funds long-term. v1 uses ordinary ERC20 custody in the auction contract. See `docs/HELPER_CUSTODY.md`.
+- **Two commit paths, one ledger.** `commit` pulls with `transfer_from`. `privacy_invoke` is called by the pool after it has already delivered the collateral in the same transaction. Both verify arrival against the `escrowed` ledger and never read an amount from calldata. Keep both: `commit` is the no-redeploy fallback if the pool path misbehaves. Custody stays ordinary ERC20 and no note is carried across time. See `docs/HELPER_CUSTODY.md`.
 - **One token, one item, one round.** STRK only. No multi-item, no multi-round, no upgradeability, no proxy, no reputation system, no arbitration.
 - **No new cryptography.** The privacy machinery is STRK20's.
 
@@ -33,7 +33,7 @@ Do not change these without an explicit instruction. They are scope decisions, n
 | Contract libs | OpenZeppelin Cairo, ERC20 interface only |
 | Hash | Poseidon, both sides |
 | Amounts | u256, never felt252 |
-| Privacy | Privacy SDK 0.14.3-rc.4, SDK route, sub-accounts |
+| Privacy | Privacy Wallet API v0.10.3 via `WalletAccountV6`. The wallet proves. Sealed hosts no prover |
 | Frontend | Next.js 14 App Router, TypeScript, Tailwind |
 | Chain access | starknet.js |
 | Off-chain | Supabase Postgres, listing metadata and reminders only |
@@ -45,9 +45,10 @@ Versions are pinned. Do not bump Scarb, the Cairo compiler, snforge, or OpenZepp
 The pool handles identity and value transport. The auction contract handles custody as plain ERC20.
 
 ```
-main wallet -> shield -> pool -> private transfer -> sub-account
-  -> ERC20 transfer_from (uniform collateral) -> auction contract
-  -> claim -> fresh sub-account -> re-shield -> pool
+main wallet -> shield -> pool
+  -> ONE transaction: withdraw collateral to auction, then privacy_invoke
+  -> auction contract holds ordinary ERC20
+  -> claim -> fresh payout account -> re-shield -> pool
 ```
 
 ## Invariants, test all of these

@@ -10,29 +10,36 @@ Status: locked for the STRK20 Private Sprint, 14 to 31 August 2026. Anything not
 
 | Dependency | Status | Consequence |
 | --- | --- | --- |
-| SDK-route private sub-accounts | **Confirmed.** Ships in Privacy SDK 0.14.3-rc.4, backed by `sub_account_anonymizer`. Sub-accounts act only inside pool-driven invocations. | Load-bearing. A canonical anonymizer deployment has not been found, so Step 3 must resolve or deploy one. |
-| Wallet API sub-account route | Not available | Does not block Sealed. Bidders onboard through the app, not through their existing wallet. |
+| SDK-route private sub-accounts | Confirmed to exist, but usable only inside a pool-driven invocation, and needs a `subAccountAnonymizerAddress` with no canonical deployment found. | **Not used.** Would require deploying our own anonymizer and self-hosting a prover. |
+| Wallet API `withdraw` to any recipient | **Confirmed.** `STRK20_WITHDRAW_ACTION` carries an arbitrary `recipient`, unlike `deposit`, which is documented always-to-self. | The fallback funding path, and the reason `commit` is kept. |
+| Wallet API `invoke` composed with `withdraw` | **Confirmed.** All four actions are one union, submitted as a single transaction, dispatched to `selector!("privacy_invoke")`. | **Load-bearing.** This is how a bid is funded. The wallet proves it, so no prover is needed. |
 | Stateful helper custody across time | Documented via empty `Span<OpenNoteDeposit>`, with an unofficial escrow example | Not used in v1. See below. |
-| **Multi-user custody in one helper** | **Not established.** No documented example. The docs state helpers should be small, reviewable, and should not hold user funds long-term. | **Design changed to avoid it entirely.** |
+| **Multi-user custody in one helper** | **Adopted for the receiving half only.** `awesome-strk20/pocs/escrow-helper` is a reference for many depositors in one helper, and the Wallet API composes withdraw with invoke in a single transaction. | `privacy_invoke` funds a commit. No note is carried across time, so the unresolved part of the question is not on the critical path. |
 | Payout destination | Determined by `OpenNoteDeposit.note_id`, not by the caller. No prior channel with the helper appears to be required. | Useful for the stretch design, not needed in v1. |
 
-The multi-user custody question is the one that reshaped this document. Asking a helper to act as a multi-depositor escrow ledger runs against the protocol's stated intent for helpers, and no reference implementation demonstrates it. Building the auction on an unverified lifecycle would put the entire project behind a question only the protocol engineers can answer.
+The multi-user custody question reshaped this document twice. It first ruled `privacy_invoke` out, because no reference implementation was known and the docs say helpers should be small and should not hold user funds long-term. Research on day 2 found `awesome-strk20/pocs/escrow-helper`, which is exactly that pattern, and established that the Wallet API composes `withdraw` with `invoke` in one transaction. That reopened it, and it is now the funding path. Full record in `docs/HELPER_CUSTODY.md`.
 
-**v1 does not use helper custody.** The auction contract holds ordinary ERC20. A
-pool-driven sub-account invocation is still required to perform the bidder's
-`approve` and `commit` calls.
+**v1 uses `privacy_invoke` to receive, and nothing else.** The auction contract
+holds ordinary ERC20 throughout. The pool withdraws collateral to it and calls
+`privacy_invoke` in the same transaction, which records the commitment and
+returns an empty `Span<OpenNoteDeposit>`. No sub-account and no self-hosted
+prover is required, because both actions are in the Wallet API union.
+
+The unresolved question was whether a `note_id` from a deposit at T0 can be
+filled by an independent claim at T1. Sealed does not need to know: `claim` pays
+a public address by ordinary ERC20 transfer, so no note ever crosses time.
 
 ---
 
 ## 1. What is being built
 
-A single-item, single-round, sealed-bid, second-price auction. Bidders act through unlinkable private sub-accounts, commit to a bid without revealing it, escrow a uniform collateral, then reveal after the auction closes. The highest valid bidder wins and pays the second-highest price.
+A single-item, single-round, sealed-bid, second-price auction. Bidders commit to a bid without revealing it, escrow a uniform collateral out of a shielded balance, then reveal after the auction closes. The highest valid bidder wins and pays the second-highest price.
 
 Privacy is three separate requirements, engineered separately:
 
-1. **Unlinkable bidder identity.** SDK-route private sub-accounts. No public onchain link back to the bidder's main wallet.
+1. **Unlinkable bidder identity.** The bid is funded by the pool, from a shielded balance, in a transaction a relayer submits. No bidder-controlled address appears in the commit at all.
 2. **Private bid value.** Poseidon commitments plus uniform collateral. The pool does not deliver this and was never going to: app-side amounts can be public, so the mechanism must hide the bid, not the pool.
-3. **Private funding and exit.** Shielded balances fund the sub-accounts, and proceeds re-shield afterwards.
+3. **Private funding and exit.** Shielded balances fund the collateral, and payouts re-shield afterwards.
 
 Conflating these is how a design like this fails.
 
@@ -46,31 +53,35 @@ Conflating these is how a design like this fails.
 main wallet
     │  shield (well ahead of auction)
     ▼
-STRK20 pool ──── private transfer ────► private sub-account contract
-      │                                       ▲
-      │ pool-driven anonymizer invoke         │ acts only inside this invoke
-      └───────────────────────────────────────┘
-                          │ approve token, then call commit
-                          ▼
-                 Sealed auction contract
-                                              │ settle, then per-entry claim
-                                              ▼
-                                        private sub-account
-                                              │ re-shield
-                                              ▼
-                                         STRK20 pool
+STRK20 pool
+    │
+    │  ONE transaction, submitted by a relayer:
+    │    withdraw  collateral -> auction contract
+    │    invoke    auction.privacy_invoke(bid_commitment, claim_handle)
+    ▼
+Sealed auction contract   (ordinary ERC20 custody)
+    │  settle, then per-entry claim to the address
+    │  committed inside claim_handle
+    ▼
+fresh payout account
+    │  re-shield
+    ▼
+STRK20 pool
 ```
 
-The auction contract is a plain Cairo contract holding ERC20 balances. It makes no
-assumption about helper statefulness or multi-depositor helper accounting. The bid
-transaction does depend on the pool driving `sub_account_anonymizer`, with an empty
-open-note span so collateral remains in the auction contract.
+The auction contract is a plain Cairo contract holding ERC20 balances. `privacy_invoke`
+only receives: it records the commitment and returns an empty `Span<OpenNoteDeposit>`,
+so no note is created and nothing is carried across time.
 
-**What this costs.** The anonymizer address and pool-driven call path are critical
-dependencies. **What it buys.** Auction accounting and long-lived custody remain in
-the small contract we control rather than in a multi-user privacy helper.
+**What this costs.** A second entrypoint on a money path, and a dependency on the pool
+delivering before it invokes. That delivery is verified, not trusted: see section 6.
+**What it buys.** No sub-account, no anonymizer of our own, and no self-hosted prover,
+because `withdraw` and `invoke` are both in the Wallet API union and the user's wallet
+does the proving.
 
-**Why the collateral transfer leaks nothing.** Every bidder transfers an identical amount, so the visible ERC20 leg is uniform across all bidders and carries zero information about any bid. The address performing it is a sub-account with no public link to a person.
+**Why the collateral transfer leaks nothing.** Every bidder's collateral is identical, so
+the visible leg is uniform across all bidders and carries zero information about any bid.
+The address performing it is the pool, which is the same for every bidder.
 
 ---
 
@@ -88,8 +99,8 @@ These do not change during the sprint.
 | Client hash | starknet.js Poseidon, verified byte-identical against Cairo on day 2 |
 | Amount type | u256 throughout, never felt252 for token values |
 | Token | One token for the whole sprint. STRK. |
-| Privacy layer | Privacy SDK 0.14.3-rc.4, SDK route, sub-accounts only |
-| Custody | Ordinary ERC20 held by the auction contract; funded through a pool-driven sub-account invocation, not helper custody. |
+| Privacy layer | Privacy Wallet API v0.10.3 via `WalletAccountV6`, starknet.js 10.4.0. The wallet proves; Sealed hosts no prover. |
+| Custody | Ordinary ERC20 held by the auction contract, funded by a pool `withdraw` plus `privacy_invoke` in one transaction. |
 | Frontend | Next.js 14 App Router, TypeScript, Tailwind |
 | Chain access | starknet.js |
 | Off-chain store | Supabase Postgres, listing metadata and reveal reminders only |
@@ -122,8 +133,8 @@ At claim the caller presents `(claim_secret, payout_address)`. The contract reco
 
 Two consequences to design around:
 
-- The payout address must exist **before** committing. The frontend generates the payout sub-account during the bid flow, not at claim time.
-- The payout address is inside the hash, not stored in cleartext, so the committing sub-account and the payout sub-account are not publicly linked until the claim transaction itself.
+- The payout address must exist **before** committing. The frontend generates the payout account during the bid flow, not at claim time.
+- The payout address is inside the hash, not stored in cleartext, so nothing links the commitment to its destination until the claim transaction itself.
 
 Starknet's current sequencer does not expose a public mempool the way Ethereum does, but this design does not rely on that. Treat every claim as observable.
 
@@ -148,7 +159,7 @@ CREATED ──> OPEN ──> REVEALING ──> SETTLED
               └──> CANCELLED (only before the first commitment)
 ```
 
-**Open.** Seller sets a public reserve price, uniform collateral, close timestamp, and reveal deadline. Each bidder, from a private sub-account, submits `bid_commitment` and `claim_handle` and transfers exactly the collateral in.
+**Open.** Seller sets a public reserve price, uniform collateral, close timestamp, and reveal deadline. Each bidder submits `bid_commitment` and `claim_handle` through the pool, which delivers exactly the collateral in the same transaction.
 
 **Revealing.** Opens at close time. Bidder submits `(amount, bid_salt, claim_handle)`. Contract recomputes the hash, checks it matches, checks `reserve <= amount <= collateral`, and updates the running highest and second-highest. `claim_secret` is not used here.
 
@@ -237,16 +248,25 @@ Both claim paths use the same authorisation: recompute the Poseidon handle from 
 
 ## 7. STRK20 integration
 
-- SDK-route sub-account calls via `transfers.build().subaccounts(dappName).invoke(nonce, { calls }).execute()`, backed by `sub_account_anonymizer`
-- A configured `subAccountAnonymizerAddress`; no canonical Sepolia or mainnet deployment has been found
-- Registration and viewing key setup on first use
-- Shielding to fund, private transfer from main shielded balance to sub-account
-- Channel and per-token subchannel setup
-- Multi-note spends with automatic change when collateral does not match a single note
-- Note scanning so bidders see funds arrive
-- Fresh sub-account per payout, so committing and claiming identities are not linked
+Sealed is an anonymizer contract plus a Wallet API dapp. It hosts no prover and no
+discovery service, and it holds no viewing key.
 
-**Unlinkability comes from the sub-account, not the pool.** The guarantee is precisely no public onchain link back to the main wallet. It is not unconditional anonymity: timing and app-side amounts remain observable.
+- **`privacy_invoke` on the auction contract**, called by the pool through
+  `selector!("privacy_invoke")`, funding a commitment
+- **A composed action array**, `withdraw` then `invoke`, submitted as one STRK20
+  transaction through `WalletAccountV6`
+- **Shielding to fund**, and a private transfer if the bidder's notes do not already
+  cover the collateral
+- **Shielded balance reads**, so a bidder can see whether they can afford to bid
+- **Re-shielding on exit**, depositing the payout back into the pool
+- **Registration and viewing key setup on first use**, performed by the wallet
+
+**Unlinkability comes from the pool and its relayers, not from a sub-account.** The
+commit transaction is submitted by a rotating shared relayer and its on-chain caller is
+the pool, so no bidder-controlled address appears in the commit. This is a stronger
+position than the sub-account route, where the sub-account is still a distinct on-chain
+identity per bidder. It is not unconditional anonymity: timing and app-side amounts
+remain observable.
 
 ---
 
@@ -254,18 +274,22 @@ Both claim paths use the same authorisation: recompute the Poseidon handle from 
 
 **Hidden:** which real person is behind any bidder, and every bid amount until that bidder reveals.
 
-**Visible:** that an auction exists, the reserve price, the collateral amount, the number of commitments, the timing of each, the sender address of every commit transaction, the ERC20 source of every collateral transfer, all revealed amounts after the reveal window opens, the clearing price, each claim amount, and each payout address once claimed.
+**Visible:** that an auction exists, the reserve price, the collateral amount, the number of commitments, the timing of each, the pool as the source of every collateral transfer, all revealed amounts after the reveal window opens, the clearing price, each claim amount, and each payout address once claimed.
 
-**What unlinkability does and does not mean here.** The chain absolutely can associate a sub-account with a position. Every commit has a visible sender, and the collateral transfer exposes its source. What the design provides is that the sub-account carries no public onchain link back to the bidder's main wallet, which is precisely the guarantee the sub-account primitive offers and nothing more. If the sub-account primitive fails or is misused, for example by funding it directly from a main wallet on the public chain, this property is gone. Sealed does not claim that a position cannot be tracked. It claims a position cannot be traced to a person.
+**What unlinkability does and does not mean here.** The commit carries no bidder address. Its on-chain caller is the pool and its submitter is a rotating shared relayer, so the chain sees the pool funding an entry and cannot see which shielded balance paid for it. That is stronger than the sub-account route, which still puts a distinct per-bidder address on chain.
+
+What this rests on is the pool's own anonymity set. If a bidder shields immediately before bidding, or is the only person using the pool in that window, the pool cannot help them, and Sealed cannot either. Sealed does not claim a position cannot be tracked. It claims a position cannot be traced to a person, and only as far as the pool's anonymity set carries it.
 
 **Known leaks and constraints:**
 
 - Bids cannot exceed the collateral. Sellers set a collateral band suited to the item.
-- Shielding or funding a sub-account immediately before committing creates a timing link. The UI warns users to fund well ahead.
+- Shielding immediately before committing creates a timing link, and a thin anonymity set weakens the guarantee to nothing. The UI warns users to shield well ahead.
 - Commitment timing is public, so a bidder committing alone in a quiet hour is weakly linkable by timing.
-- Claim amounts are visible. The winner's claim differs in size from losers' claims, so after settlement the winner's claiming sub-account is identifiable as the winner's. It is still unlinked to a main wallet.
+- Deposits into the pool are screened and signed by a third party, FPI, before shielding. Sealed does not perform that check and does not see its result, but it is part of the path a bidder takes.
+- The proving service sees the request that proves a transaction unless OHTTP envelope encryption is enabled. With the Wallet API route this is the wallet's choice, not Sealed's.
+- Claim amounts are visible. The winner's claim differs in size from losers' claims, so after settlement the winning payout address is identifiable as the winner's. It is still unlinked to a main wallet, provided the payout is re-shielded rather than swept somewhere identifying.
 - After reveal, all bids are public by design. This is what a sealed-bid auction promises offline, and nothing more.
-- The payout address becomes public at claim, linking the committing sub-account to the payout sub-account at that moment.
+- The payout address becomes public at claim, and the claim is an ordinary public transaction. It reveals the destination, not the bidder.
 - Sealed settles money, not delivery. The contract has no view of whether the seller ships the item. This is a settlement primitive for an auction, not an enforceable sale, and the README says so plainly. The demo uses a digital item where delivery is trivially verifiable.
 
 **Scope boundary.** Sealed implements commit-reveal: sealed until close, then opened. Determining a winner without any bid ever being revealed requires a ZK circuit proving the winning bid was highest and the clearing price second-highest without disclosing bids. STRK20 does not provide that automatically. Documented as future work, not attempted this sprint. Anyone proposing it mid-sprint is proposing a different project.
@@ -328,7 +352,7 @@ sealed/
 | Days | Work | Done means |
 | --- | --- | --- |
 | 1 to 2 | Toolchain pinned, hello-world contract on Sepolia, Poseidon parity between Cairo and starknet.js | A contract you wrote is deployed and callable |
-| 3 | **Gate:** an SDK-route sub-account calls your contract and transfers tokens in | Sub-account created, unlinked, transaction lands |
+| 3 | **Gate:** a composed `withdraw` plus `privacy_invoke` funds a commitment on Sepolia | One transaction, collateral arrives, entry recorded |
 | 4 to 7 | Full auction contract, commit, reveal, settle, claim, snforge tests covering all eight invariants | Tests green |
 | 8 to 11 | Frontend, SDK wiring, secret persistence and backup, reveal reminders | End-to-end auction on Sepolia with three bidders |
 | 12 to 13 | Mainnet declare and deploy, one real auction end to end with small amounts | Mainnet transaction hashes in the README |
@@ -340,13 +364,13 @@ sealed/
 
 ## 13. The day 3 gate
 
-The gate is one specific transaction on Sepolia: **a pool-driven invocation of `sub_account_anonymizer` whose `calls` are `approve` on the token and `commit` on a contract we wrote, carrying an empty open-note span so the collateral stays in that contract.** If that is not working by end of day 3, the sub-account primitive is not usable for custody the way Sealed needs and the identity claim is gone.
+The gate is one specific transaction on Sepolia: **a single STRK20 submission whose actions are `withdraw` of the collateral to the auction contract and `invoke` of `privacy_invoke` on it, after which `get_commitment_count` is 1 and `get_escrowed` equals the collateral.** If that is not working by end of day 3, the funding path is not usable as documented.
 
-It was described as trivial when this document assumed the sub-account could perform an ordinary `transfer_from` on its own. Step 0 established that it cannot: the anonymizer restricts driving sub-accounts to the pool contract. The gate is now the riskiest thing on the critical path, not the cheapest.
+This gate went through three shapes. It was trivial while this document assumed a sub-account could perform an ordinary `transfer_from` on its own. Step 0 established that it cannot, since the anonymizer restricts driving sub-accounts to the pool, which made the gate the riskiest thing on the critical path and added a self-hosted prover and an anonymizer deployment behind it. Day 2 research replaced the whole route: `withdraw` and `invoke` compose in the Wallet API, so the wallet proves and nothing extra is deployed.
 
-**It also has a prerequisite that is not ours to satisfy.** No canonical `sub_account_anonymizer` deployment has been found on Sepolia or mainnet, and the SDK requires a `subAccountAnonymizerAddress`. Either the protocol team confirms a deployed address, or Sealed deploys and maintains its own anonymizer, which is an unplanned second contract that transiently holds user funds. Ask in the Cairo CoreStars Telegram, `@sncorestars`, on day 1 rather than discovering it on day 3.
+**First fallback, no redeploy.** `commit` is still on the contract. A bidder can `withdraw` the collateral to a fresh account and call `approve` and `commit` from it. Two public legs instead of one, and the bidder needs gas, but the auction is unchanged and already tested. This is the reason both entrypoints exist.
 
-**Fallback: strk20-kit,** a drop-in React component kit for shield, unshield, private transfer, and balance, plus a small mainnet reference app built from those components. No custom Cairo, same empty infrastructure lane, same documentation strength.
+**Second fallback: strk20-kit,** a drop-in React component kit for shield, unshield, private transfer, and balance, plus a small mainnet reference app. No custom Cairo, weaker claim, same documentation strength.
 
 Written down now, while calm. On day 10 the instinct will be to keep pushing. That instinct is what loses sprints.
 
@@ -356,7 +380,9 @@ Written down now, while calm. On day 10 the instinct will be to keep pushing. Th
 
 | Risk | Severity | Mitigation |
 | --- | --- | --- |
-| ~~Sub-account unlinkability unavailable~~ | Cleared | SDK route ships in 0.14.3-rc.4 |
+| ~~Sub-account unlinkability unavailable~~ | Designed out | Route replaced by pool-funded `privacy_invoke`. No sub-account, no prover |
+| Pool delivers less than it claims to | High | No amount is read from calldata. Arrival is verified against the `escrowed` ledger |
+| Pool `invoke` path misbehaves on mainnet | Medium | `commit` is retained, so the frontend switches to withdraw-then-approve with no redeploy |
 | ~~Multi-user helper custody unverified~~ | Designed out | v1 uses ordinary ERC20 custody. Moved to stretch |
 | Sub-account creation is awkward or slow in practice | High | Day 3 gate |
 | `bid_salt` reused as a claim credential | High | Two independent secrets, invariant 4 |
