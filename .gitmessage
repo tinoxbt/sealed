@@ -1,0 +1,18 @@
+# Subject: imperative mood, under 72 characters, no trailing period.
+# "Add reveal bounds check", not "Added" or "Adding" or "reveal stuff".
+#
+# Blank line, then the body. The body answers why, not what. The diff
+# already says what. If the change is not obvious in six months, say
+# what you tried that did not work, or what constraint forced it.
+#
+# One logical change per commit. If the body needs the word "also",
+# that is two commits.
+#
+# State verification honestly. "Tests pass" means you ran them. If
+# something is unverified, say so in the body rather than implying it
+# works. An unverified commit is fine. A commit that pretends is not.
+#
+# Reference the handoff step where relevant, for example "Step 2".
+#
+# No Co-Authored-By trailers. Commits are authored by the repository
+# owner regardless of which tool produced the diff.

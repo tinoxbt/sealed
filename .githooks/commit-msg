@@ -1,0 +1,75 @@
+#!/bin/sh
+# Blocks the commit shapes that actually went wrong on this project.
+# Install with scripts/setup-hooks.sh
+#
+# ponytail: local hooks only, so a fresh clone is unprotected until it
+# runs the setup script. Move to a GitHub Action if that starts to bite.
+
+msg_file="$1"
+source="$2"
+
+# Merges, squashes, and amends carry generated messages. Leave them alone.
+case "$source" in
+  merge|squash) exit 0 ;;
+esac
+
+fail() {
+  echo "commit-msg: $1" >&2
+  echo "" >&2
+  echo "Fix the message and commit again. See .gitmessage for the shape." >&2
+  exit 1
+}
+
+# Strip comments and blank leading lines.
+body=$(grep -v '^#' "$msg_file" | sed '/./,$!d')
+subject=$(printf '%s\n' "$body" | head -1)
+
+[ -n "$subject" ] || fail "empty subject."
+
+len=$(printf '%s' "$subject" | wc -c | tr -d ' ')
+[ "$len" -le 72 ] || fail "subject is $len characters, limit is 72."
+
+case "$subject" in
+  *.) fail "subject ends with a period." ;;
+esac
+
+# Lazy subjects. These are the ones that make a log useless six months on.
+lower=$(printf '%s' "$subject" | tr '[:upper:]' '[:lower:]')
+case "$lower" in
+  wip|wip*|fix|fixes|update|updates|changes|stuff|misc|more|cleanup|temp|test|asdf*)
+    fail "'$subject' says nothing. Say what changed and why." ;;
+esac
+
+# Require a body. This is the whole point: detail is not optional.
+lines=$(printf '%s\n' "$body" | sed '/^[[:space:]]*$/d' | wc -l | tr -d ' ')
+if [ "$lines" -lt 2 ]; then
+  fail "no body. Subject alone is not enough, explain why in a body."
+fi
+
+# Staged size checks. Warn on volume, block on anything that looks like a
+# downloaded toolchain. A large unrelated archive was staged here once.
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+[ -n "$staged" ] || exit 0
+
+count=$(printf '%s\n' "$staged" | sed '/^$/d' | wc -l | tr -d ' ')
+if [ "$count" -gt 50 ]; then
+  fail "$count files staged. That is a vendored dependency or a stray
+  install, not a change. Check git status and stage deliberately."
+fi
+if [ "$count" -gt 15 ]; then
+  echo "commit-msg: warning, $count files in one commit." >&2
+  echo "  If this is more than one logical change, split it." >&2
+fi
+
+printf '%s\n' "$staged" | while IFS= read -r f; do
+  [ -f "$f" ] || continue
+  size=$(wc -c < "$f" | tr -d ' ')
+  if [ "$size" -gt 5242880 ]; then
+    echo "commit-msg: $f is $((size / 1048576))MB." >&2
+    echo "  Nothing in this repository should be that large." >&2
+    echo "  If it is a real artifact, gitignore it or use --no-verify." >&2
+    exit 1
+  fi
+done || exit 1
+
+exit 0
