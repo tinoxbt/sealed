@@ -1,6 +1,5 @@
 mod auction;
 mod erc20;
-mod hello;
 
 #[cfg(test)]
 mod mock_erc20;

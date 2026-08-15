@@ -6,11 +6,6 @@ mod tests {
     /// Felts per vector in commitments_flat.txt, in fixture order.
     const STRIDE: usize = 7;
 
-    #[test]
-    fn hello_world_smoke_test() {
-        assert(1 + 1 == 2, 'arithmetic failed');
-    }
-
     /// Poseidon parity against the TypeScript side.
     ///
     /// Reads the fixture generated from contracts/test_vectors/commitments.json

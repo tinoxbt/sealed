@@ -350,6 +350,102 @@ mod tests {
         auction.claim(SELLER_SECRET, addr('seller_payout'));
     }
 
+    // Not one of the twelve, but each of these is a way the contract could
+    // leak money or lock it up, so they are worth pinning down.
+
+    // Bidding after close_time must be refused. Without this, a bidder could
+    // watch the reveals start and then commit with perfect information.
+    #[test]
+    #[should_panic(expected: 'bidding closed')]
+    fn commit_after_close_rejected() {
+        let b1 = addr('b1');
+        let (auction, _, _) = setup(array![b1].span());
+
+        start_cheat_block_timestamp_global(CLOSE);
+        do_commit(auction, b1, 500, 'salt1', 'sec1', addr('p1'));
+    }
+
+    // The boundary itself: one second before close is still open.
+    #[test]
+    fn commit_just_before_close_accepted() {
+        let b1 = addr('b1');
+        let (auction, _, _) = setup(array![b1].span());
+
+        start_cheat_block_timestamp_global(CLOSE - 1);
+        do_commit(auction, b1, 500, 'salt1', 'sec1', addr('p1'));
+        assert(auction.get_commitment_count() == 1, 'accepted at close - 1');
+    }
+
+    // Reusing a claim_handle would overwrite the first bidder's entry and strand
+    // their collateral in the contract.
+    #[test]
+    #[should_panic(expected: 'handle already used')]
+    fn duplicate_claim_handle_rejected() {
+        let b1 = addr('b1');
+        let b2 = addr('b2');
+        let (auction, _, _) = setup(array![b1, b2].span());
+
+        do_commit(auction, b1, 500, 'salt1', 'sec1', addr('p1'));
+        // Same secret and same payout address, so the same handle.
+        do_commit(auction, b2, 600, 'salt2', 'sec1', addr('p1'));
+    }
+
+    #[test]
+    fn cancel_before_any_commitment() {
+        let b1 = addr('b1');
+        let (auction, _, _) = setup(array![b1].span());
+
+        auction.cancel(SELLER_SECRET, addr('seller_payout'));
+        assert(auction.get_state() == AuctionState::Cancelled, 'cancelled');
+    }
+
+    // Once collateral is escrowed, cancelling would strip bidders of the only
+    // path back to their funds.
+    #[test]
+    #[should_panic(expected: 'cannot cancel now')]
+    fn cancel_after_commitment_rejected() {
+        let b1 = addr('b1');
+        let (auction, _, _) = setup(array![b1].span());
+
+        do_commit(auction, b1, 500, 'salt1', 'sec1', addr('p1'));
+        auction.cancel(SELLER_SECRET, addr('seller_payout'));
+    }
+
+    // Cancel is authorised by the seller handle preimage, not by caller
+    // address, so a stranger holding no secret cannot cancel.
+    #[test]
+    #[should_panic(expected: 'bad seller handle')]
+    fn cancel_by_non_seller_rejected() {
+        let b1 = addr('b1');
+        let (auction, _, _) = setup(array![b1].span());
+
+        auction.cancel('not_the_seller', addr('seller_payout'));
+    }
+
+    // The seller secret is right but the destination is not the one committed,
+    // so the handle does not match. Same protection as invariant 9, seller side.
+    #[test]
+    #[should_panic(expected: 'bad seller handle')]
+    fn cancel_with_wrong_payout_rejected() {
+        let b1 = addr('b1');
+        let (auction, _, _) = setup(array![b1].span());
+
+        auction.cancel(SELLER_SECRET, addr('attacker'));
+    }
+
+    // A cancelled auction must not then settle, which would otherwise give the
+    // seller a claim_proceeds path against an auction that never ran.
+    #[test]
+    #[should_panic(expected: 'auction not open')]
+    fn cancelled_auction_cannot_settle() {
+        let b1 = addr('b1');
+        let (auction, _, _) = setup(array![b1].span());
+
+        auction.cancel(SELLER_SECRET, addr('seller_payout'));
+        start_cheat_block_timestamp_global(DEADLINE + 1);
+        auction.settle();
+    }
+
     // Invariant 5, fuzzed. The running top-two update has to be right for
     // reveals arriving in any order, including ties and duplicates.
     #[test]

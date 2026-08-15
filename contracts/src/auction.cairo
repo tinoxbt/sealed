@@ -18,6 +18,43 @@
 //! Hash encoding is fixed and verified against starknet.js by
 //! `poseidon_parity_with_starknet_js`. u256 amounts hash as two felts, low limb
 //! first. Addresses are single felts.
+//!
+//! ## Conservation of funds, for review
+//!
+//! The contract takes in exactly `collateral` per commitment and never mints,
+//! so with `N` commitments it holds `N * collateral`. Let `R` be the number of
+//! entries revealed and `F = N - R` the number forfeited. Exactly one revealed
+//! entry is the winner, when `R > 0`.
+//!
+//! Payouts:
+//!
+//! - each of the `R - 1` losing entries claims `collateral`
+//! - the winning entry claims `collateral - clearing_price`
+//! - the seller claims `clearing_price + F * collateral`
+//!
+//! Summing: `(R - 1) * collateral + collateral - clearing + clearing + F *
+//! collateral = (R + F) * collateral = N * collateral`. In equals out, and
+//! `clearing_price` cancels, so it cannot be paid twice or dropped.
+//!
+//! When `R = 0` there is no winner, `clearing_price` is zero, `F = N`, and the
+//! seller claims the whole pot. The same arithmetic holds with no special case.
+//!
+//! `clearing_price <= collateral` always, because a reveal is rejected unless
+//! `reserve <= amount <= collateral` and the clearing price is either a revealed
+//! amount or the reserve, and the reserve is capped at the collateral in the
+//! constructor. So `collateral - clearing_price` never underflows.
+//!
+//! Each entry pays at most once (`claimed` flag) and the seller at most once
+//! (`seller_claimed`), so the sum above is an upper bound, not just an
+//! expectation. `fuzz_invariant_8_conservation` asserts both directions: that
+//! payouts never exceed the escrow, and that nothing is left stranded.
+//!
+//! ## External call ordering
+//!
+//! Every state change is written before the ERC20 call that follows it, so a
+//! reentrant token cannot observe a stale `claimed` or `seller_claimed` flag.
+//! The token is fixed at construction and is expected to be STRK, but the
+//! ordering does not depend on the token behaving.
 
 use starknet::ContractAddress;
 
@@ -120,6 +157,11 @@ pub mod SealedAuction {
         reveal_deadline: u64,
         state: AuctionState,
         // Keyed by claim_handle. Never by address.
+        //
+        // Absence is represented by bid_commitment == 0 rather than a separate
+        // exists flag. A real commitment is a Poseidon output, so zero is
+        // unreachable in practice, and a caller cannot forge one because the
+        // preimage would have to hash to zero.
         entries: Map<felt252, Entry>,
         commitment_count: u32,
         revealed_count: u32,
@@ -213,6 +255,10 @@ pub mod SealedAuction {
                 errors::DUPLICATE_HANDLE,
             );
 
+            // Recorded before the transfer. A reentrant token calling back
+            // into commit sees this handle already taken, and if the transfer
+            // fails the whole transaction reverts, so the entry cannot outlive
+            // its collateral.
             self
                 .entries
                 .entry(claim_handle)
@@ -304,6 +350,8 @@ pub mod SealedAuction {
             // An unrevealed entry is forfeited to the seller, not refundable.
             assert(entry.revealed, errors::NOT_CLAIMABLE);
 
+            // Flag written before the transfer, so a reentrant token cannot
+            // re-enter claim and be paid twice on the same entry.
             entry.claimed = true;
             self.entries.entry(handle).write(entry);
 
@@ -336,8 +384,12 @@ pub mod SealedAuction {
                 errors::BAD_SELLER_HANDLE,
             );
 
+            // Same ordering rule as claim.
             self.seller_claimed.write(true);
 
+            // Cannot underflow: revealed_count is incremented only alongside a
+            // commitment that already exists, so it never exceeds
+            // commitment_count.
             let forfeited: u256 = (self.commitment_count.read() - self.revealed_count.read()).into();
             let amount = self.clearing_price() + forfeited * self.collateral.read();
 
