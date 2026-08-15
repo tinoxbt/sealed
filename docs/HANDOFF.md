@@ -217,11 +217,51 @@ as unavailable. Full source references and prerequisites are in
 
 ### Step 1
 
-Not started. Provisional pins exist in `contracts/Scarb.toml`, unverified, and the toolchain is not installed.
+Complete, commits `53b1e45` and `e54abca`, 15 August 2026. Scarb 2.20.0, Cairo 2.20.0,
+Sierra 1.9.3, aarch64-apple-darwin. Starknet Foundry 0.63.0 at
+`/Users/tino/.local/bin/snforge`, `snforge_std` 0.63.0. starknet.js 10.4.0 in
+`web/package.json`. `openzeppelin_interfaces` 2.1.0, checksum `f69fdb36...02a5`.
+
+OpenZeppelin took three attempts. 0.17.0 is unusable and there is no 0.18 line:
+the project renumbered past 1.0.0 and sits at 3.0.0 stable with a 4.0.0 release
+candidate. Under Cairo 2.20.0, `openzeppelin_token` 2.0.0 fails inside its own
+`erc20.cairo` on `IERC20Permit::nonces`, while `openzeppelin` 3.0.0 and
+`openzeppelin_token` 3.0.0 compile. `openzeppelin_interfaces` 2.1.0 is the
+smallest that works and pulls no transitive tree, which is what "ERC20 interface
+only" should mean.
+
+The version declarations are a red herring worth remembering: no release declares
+`cairo-version` 2.20.0, not even 4.0.0-rc.1, which still says 2.18.0. They are
+semver requirements, so 0.17.0 permitted 2.20.0 as well. It failed on its own
+code, not on the pin.
+
+`src/erc20.cairo` exists so the dependency is actually compiled. Declared but
+unimported would leave the build proving nothing about it.
+
+Verified: `scarb build` exit 0, `snforge test` exit 0.
 
 ### Step 2
 
-Not started. A vector file and TypeScript helpers exist, but no expected values and no execution on either side.
+Complete, commit `26a88a2`, 15 August 2026. Cairo and starknet.js agree on all four
+vectors: zero, one wei, a non-zero high limb, and u256 max on both limbs.
+
+`contracts/test_vectors/commitments.json` is the source of truth. Cairo cannot read
+it, because snforge's `read_txt` returns `Array<felt252>` and a 66 character hex
+string does not fit a felt, so `npm run vectors:emit` generates
+`commitments_flat.txt`, seven decimal felts per vector. Generated, never hand
+edited. The emitter recomputes both hashes and refuses to write if the source
+disagrees with itself.
+
+The Cairo test takes expected values from the fixture rather than recomputing them
+Cairo-side, so it cannot pass by agreeing with itself.
+
+Falsifiability demonstrated both ways. Flipping one bit of the first expected
+`claim_handle` turns the Cairo test red with `claim_handle mismatch`; the web side
+has `npm run vectors:negative`. Restored, both green.
+
+The encoding is now confirmed by execution rather than asserted in prose: u256 as
+two felts low limb first, addresses as single felts, Poseidon over the ordered
+span. Step 4 should treat `commitments_flat.txt` as fixed input.
 
 ### Step 3
 
