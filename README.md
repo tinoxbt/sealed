@@ -75,7 +75,7 @@ Day 2 of 17. Nothing is deployed yet.
 | Repository, license, registration | Done |
 | Toolchain pinned, Scarb 2.20.0 and snforge 0.63.0 | Done |
 | Poseidon parity between Cairo and starknet.js | Done, shared fixture asserted on both sides |
-| Auction contract: commit, privacy_invoke, reveal, settle, claim | Done, 293 lines |
+| Auction contract: commit, privacy_invoke, reveal, settle, claim | Done, 369 lines of code plus 156 of comment |
 | snforge tests covering all twelve invariants | Done, 31 passing, 2 fuzzed |
 | Day 3 gate: a composed withdraw plus privacy_invoke funds a commitment on Sepolia | Not started |
 | Frontend, wallet wiring, secret backup | Not started |
