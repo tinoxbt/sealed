@@ -146,6 +146,54 @@ deploys itself. Sealed will have to do the same.
 pinned at 2.20.0. The anonymizer cannot simply be added to our package; it needs
 its own build with its own Scarb version.
 
+### Option A proven on devnet, 15 August 2026
+
+Rungs 1 and 2 of the local verification ladder both pass. The sub-account route
+works end to end, with no Sepolia and no credentials.
+
+**Rung 1.** `sub_account_anonymizer` compiles. Built with Scarb 2.17.0 downloaded
+to a scratch directory and invoked by absolute path, so Sealed's pinned 2.20.0 is
+untouched and its 24 tests are unaffected. Produces
+`sub_account_anonymizer_SubAccountAnonymizer.contract_class.json`, which is the
+artifact we would declare and deploy.
+
+**Rung 2.** `e2e/tests/devnet/sub-account-compute-invoke.test.ts` passes: 1 passed,
+0 failed. That test is Sealed's flow. On a local devnet it deploys the privacy
+pool, declares and deploys the anonymizer, creates a sub-account, drives dapp
+calls through it, and settles the payout into an open note.
+
+What it took, all local: Scarb 2.17.0 for the privacy workspace, `starknet-devnet`
+0.8.0-rc.3 (the version the project's CI pins), `universal-sierra-compiler` which
+snfoundryup already installed, a release-profile build of the `privacy` package, a
+dev build of `sub_account_anonymizer` plus its test build for `SubAccount` and
+`MockDapp`, the test token, a Rust build of `discovery-service`, and the SDK built
+from source.
+
+**The identity claim is no longer speculative.** Option A works mechanically.
+
+### Three caveats that came out of running it
+
+**1. The pinned tag has a broken e2e test.** At `PRIVACY-0.14.3-RC.4` the test
+fails with `Missing parameter for type CollectPolicy`, because it does not encode
+`OpenNote.collect_policy`. Fixed upstream after the tag in `1e8acdb`, "fix(e2e):
+encode OpenNote.collect_policy in sub-account devnet test". The fix is two lines:
+import `CairoCustomEnum` and pass `collect_policy: new CairoCustomEnum({ All: {} })`
+in the open note. Applying the upstream commit wholesale does not work, because it
+depends on later harness changes; apply the two lines by hand. Sealed's own client
+code will hit the same encoding requirement.
+
+**2. Sub-accounts are being renamed to shadow accounts.** Commit `bf22269`,
+"refactor: rename sub-accounts to shadow accounts", lands after our pinned tag. The
+`subaccounts(dappName)` name we are writing against is already historical upstream.
+Pinning protects the build but the documentation and any newer example will use the
+other name. Worth a line in our own docs so a judge reading both is not confused.
+
+**3. Devnet proving is mocked.** The harness uses `ScreeningCallMockProofProvider`
+at `e2e/src/harness.ts:134`. So everything above proves the contract and SDK
+mechanics, and proves nothing about real STARK proof generation. A proving provider
+remains an unproven dependency for Sepolia and mainnet, and it is now the largest
+single unknown left on option A.
+
 ### What a gate run actually requires
 
 The gate was described as one transaction. It is one transaction on top of this:
