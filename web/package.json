@@ -1,0 +1,19 @@
+{
+  "name": "sealed-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "vectors": "tsc && node dist/scripts/check-vectors.js",
+    "vectors:negative": "tsc && SEALED_CORRUPT_VECTOR=1 node dist/scripts/check-vectors.js",
+    "vectors:emit": "tsc && node dist/scripts/emit-cairo-vectors.js"
+  },
+  "dependencies": {
+    "starknet": "10.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.5",
+    "tsx": "4.19.2",
+    "typescript": "5.7.3"
+  }
+}

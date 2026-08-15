@@ -1,0 +1,9 @@
+{
+  "encoding": "u256 low limb, high limb; Poseidon over ordered felts",
+  "vectors": [
+    {"name":"zero","amount_low":"0x0","amount_high":"0x0","bid_salt":"0x1234","claim_secret":"0x5678","payout_address":"0x111","claim_handle":"0x55dd469923dff05a8ec3ee483f0b65d6ed246f03d9179ee8c74ebca83b52884","bid_commitment":"0x673b63551f90e5b692922dbc06fe1f6e51c3ea9e2e7f7edfde81ceb9621fcad"},
+    {"name":"one","amount_low":"0x1","amount_high":"0x0","bid_salt":"0x1235","claim_secret":"0x5679","payout_address":"0x112","claim_handle":"0x262de4bfd2bb3b01629caf8f7fbb3c40d0b222e5f9dd2cd021660fbaee57130","bid_commitment":"0x19ba324bbf2bb5d9215f1ec8a2ff9f8a9b9ffcbc73d27b4fc51e63c05fc3fc5"},
+    {"name":"high-limb","amount_low":"0xabcdef","amount_high":"0x1","bid_salt":"0x1236","claim_secret":"0x567a","payout_address":"0x113","claim_handle":"0x42d54a7bb8436cfe0868dc04dc9f3f562ced3f576adf4e534919476262e1414","bid_commitment":"0x64bfd2cfc00da0a97a10c1831d58134d660a3c849c3c9a1e7b24a5c2aa07f75"},
+    {"name":"boundary","amount_low":"0xffffffffffffffffffffffffffffffff","amount_high":"0xffffffffffffffffffffffffffffffff","bid_salt":"0x1237","claim_secret":"0x567b","payout_address":"0x114","claim_handle":"0x88d610be25874f6acc6254f8ebb3a9bc9d450be9c5741840c741b55d43daf","bid_commitment":"0x31fc1296d718deb25255a7ca3acc2342749dd36541602c14d4705c1d38424e3"}
+  ]
+}
