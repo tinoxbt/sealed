@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "skipLibCheck": true,
+    "outDir": "dist"
+  },
+  "include": [
+    "src/commitment.ts",
+    "scripts/check-vectors.ts",
+    "scripts/emit-cairo-vectors.ts",
+    "scripts/seller-handle.ts"
+  ]
+}

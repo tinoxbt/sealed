@@ -37,3 +37,7 @@ dist/
 # file named after the platform it was requesting.
 /arm64
 /macOS
+
+# Next.js
+.next/
+next-env.d.ts
