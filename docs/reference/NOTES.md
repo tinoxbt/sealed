@@ -348,3 +348,39 @@ the deposit, which the pool verifies on chain. Self-hosting a prover does not
 bypass it. So the recommended shape is wallet for the deposit, SDK for everything
 after. Sealed does not have to solve direct deposits at all, which removes one
 worry from the SDK route even though the endpoint problem remains.
+
+
+### Correction: both endpoints are self-hostable
+
+An earlier note here framed the missing endpoints as something only StarkWare can
+supply. That is wrong, and the correction changes the decision.
+
+**Discovery.** The `discovery-service` crate is in the privacy monorepo and builds
+in about two minutes. A release binary already exists in the scratch clone from the
+devnet run. Point it at a mainnet RPC and it is our discovery provider.
+
+**Proving.** `starknet_transaction_prover` in `starkware-libs/sequencer` is a
+standalone JSON-RPC service and ships a Dockerfile:
+
+```
+docker run --rm -p 3000:3000 -e RPC_URL=https://your-node.com/rpc/v0_10 <IMAGE>
+```
+
+Its README states the cost plainly. Recommended production machine is a
+**c4d-highcpu-48: 48 vCPU, 96 GB memory, amd64 (AMD EPYC Turin)**, and "proving time
+is highly sensitive to the machine type". `MAX_CONCURRENT_REQUESTS` defaults to 2
+and is bound by available CPU and memory. Finalized blocks only, one transaction
+per request, no batching. Nightly Rust, handled inside the image.
+
+Note the architecture: amd64 is recommended, and this machine is arm64, so the
+prover is not something to run locally on the dev laptop for a demo.
+
+**And the screening leg is handled too.** Deposits need an FPI screening signature,
+which we cannot produce, but the documented pattern is to shield through Ready or
+Xverse and then privately transfer to the account the integration controls. So the
+one genuinely external dependency is avoided by using a wallet for the deposit.
+
+**Therefore option A has no hard external blocker.** It has a bill and an operations
+burden: a 48 vCPU, 96 GB amd64 instance running a prover, plus a discovery service,
+for the rest of the sprint. Whether that is worth it for sub-accounts is a budget
+question, not a dependency question, and it should be decided as one.
