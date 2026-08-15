@@ -269,7 +269,35 @@ Not started.
 
 ### Step 4
 
-Not started. An unverified draft exists at `contracts/src/auction.cairo`.
+Complete, commit `6615001`, 15 August 2026. `snforge test` runs 17 tests, all
+passing, including the twelve invariants and two fuzzed properties at 256 runs
+each.
+
+The earlier sketch was rewritten rather than patched. Native `u256` throughout,
+current entrypoint syntax, and commitment hashing that matches the step 2 fixture
+by construction.
+
+Non-negotiables held and worth rechecking on any future edit: `Entry` holds no
+`ContractAddress`; `claim` recomputes the handle and pays only the committed
+address, never the caller; `cancel` authorises against the seller handle preimage
+so no seller address is stored either; `settle` moves no money;
+`get_entry_status` derives and stores nothing.
+
+`auction.cairo` is 437 lines, of which 325 are code and 112 are comments and
+blanks. The 300 line target in `CLAUDE.md` is met on code, not on the raw count.
+The comments are mostly the non-negotiables restated at the point where an
+optimiser would be tempted to break them, which is where they earn their keep.
+
+Gaps a later pass should close, none of them in the twelve: no test for a commit
+after `close_time`, none for a duplicate `claim_handle`, and none for `cancel`
+succeeding or being rejected once a commitment exists. The fuzzed bid range is
+`u8` mapped into `[RESERVE, RESERVE + 255]`, which is well inside the collateral
+and does not exercise amounts near the collateral cap.
+
+Steps 0, 1, 2 and 4 are now done. **Step 3, the gate, is the only one left, and it
+is blocked on something that is not ours to produce:** no canonical
+`sub_account_anonymizer` deployment has been found, and the SDK requires an
+address. Resolve that before day 3.
 
 ### Recovery batch, 15 August 2026
 
