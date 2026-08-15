@@ -384,3 +384,99 @@ one genuinely external dependency is avoided by using a wallet for the deposit.
 burden: a 48 vCPU, 96 GB amd64 instance running a prover, plus a discovery service,
 for the rest of the sprint. Whether that is worth it for sub-accounts is a budget
 question, not a dependency question, and it should be decided as one.
+
+
+---
+
+## (d) Is there an ecosystem prover to join? Researched 15 August 2026
+
+**Yes. It is the user's wallet, and it changes which design is cheap.**
+
+### The ecosystem proving service is the wallet
+
+`starkience/strk20-agent-skills`, `references/wallet-api-route.md`: on the Privacy
+Wallet API route "the wallet handles keys, notes, proving, and the pool. The dapp
+never touches the viewing key or the SDK." Wallet scope is Ready and Xverse, both
+live on mainnet.
+
+That is why the starter kit runs on nothing but an Alchemy key, and why the
+official app needs no prover URL. There is no public prover endpoint to point at,
+and searching for one is the wrong question: on the wallet route you do not call a
+prover at all.
+
+Confirmed by a first-party example in the same guide: AVNU ships private swaps end
+to end, "their executor is deployed, their SDK composes the `privacy_invoke` flow,
+and the user's wallet does the proving, so a dapp that needs swap privately needs
+no Cairo at all."
+
+**So anonymizer calls can be wallet-proven.** That is the way around the 48 vCPU
+prover, and it is real.
+
+### But it does not reach sub-accounts
+
+The Wallet API's action union, from `@starknet-io/types-js@0.10.3`,
+`dist/types/wallet-api/components.d.ts:227`:
+
+```ts
+type STRK20_ACTION =
+  | STRK20_DEPOSIT_ACTION    // shield
+  | STRK20_WITHDRAW_ACTION   // unshield
+  | STRK20_TRANSFER_ACTION   // private transfer, amount FELT or "OPEN"
+  | STRK20_INVOKE_ACTION;    // plain privacy_invoke on any contract
+```
+
+`STRK20_INVOKE_ACTION` is plain `privacy_invoke`: a contract address and calldata,
+with wallet-resolved placeholders `${openNoteIds[N]}` and `${poolAddress}`.
+
+**There is no compute-and-invoke variant.** Sub-accounts need
+`privacy_invoke_with_computation`, where the pool first calls `privacy_compute` to
+derive the identity commitment and only then invokes. That shape cannot be
+expressed through the Wallet API at spec v0.10.3.
+
+So the rule is exact:
+
+| Design | Route | Prover |
+| --- | --- | --- |
+| Sub-accounts, `ComputeAndInvoke` | SDK only | Ours to run |
+| Plain `privacy_invoke` helper | Wallet API works | The wallet's |
+
+Sub-accounts are the one thing that forces a self-hosted prover. Nothing else does.
+
+### The consequence, and it inverts the plan
+
+The v2 stretch in `ARCHITECTURE.md` section 9, helper custody through
+`privacy_invoke`, is exactly the shape the Wallet API supports. And section (a) of
+this document already found a working reference for it in
+`awesome-strk20/pocs/escrow-helper`: deposit parks value against a commitment and
+returns an empty span, a later independent claim presents the secret and returns a
+populated `OpenNoteDeposit` crediting a note.
+
+The full pattern is expressible in wallet actions: a `transfer` with amount
+`"OPEN"` creates the note, and `${openNoteIds[0]}` is passed into the `invoke`
+calldata so the helper can credit it. That is exactly how the starter kit's echo
+helper and the private-escrow PoC work.
+
+So the two designs cost very differently from what we assumed:
+
+- **Sub-accounts (current v1):** SDK route, self-hosted prover on a 48 vCPU
+  instance, self-hosted discovery, our own anonymizer deployment.
+- **Helper custody (current v2 stretch):** Wallet API, no prover, no discovery
+  service, our own helper contract, and the bidder never appears as a public
+  address at all because the pool relays.
+
+The design we deferred as too risky is the one with no infrastructure bill.
+
+### What would have to be true before switching
+
+Not a recommendation yet. The open questions from section (a) still stand and are
+the ones that matter:
+
+- No test of interleaved multi-user deposits and claims in the escrow reference.
+- The guidance that helpers should not hold user funds long-term, and an auction
+  holds collateral for the whole bidding and reveal window.
+- Amounts are `u128` there against Sealed's `u256`.
+- Forfeiture has no analogue in the escrow pattern and would have to be designed.
+- The team owns audit, deployment and maintenance of any production anonymizer.
+
+The auction contract itself is unaffected either way. It receives ERC20 and pays to
+a committed address, and knows nothing about how value arrives.
