@@ -231,3 +231,86 @@ human decision and it should be made deliberately, not by drifting into day 10.
 - **Mainnet pool address**, from the awesome list: `0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a`. Verify independently before sending anything to it.
 - **Sealed-bid auctions are an official RFP**, at https://strk20.starknet.io/rfp/sealed-bid-auctions. Its framing is bids as encrypted notes, invisible even to the auctioneer, covering first-price, Vickrey, and multi-unit, with the phrase "no commit-reveal griefing". Sealed is commit-reveal and does not attempt the stronger property. Section 8's scope boundary already states this. Keep stating it, since the RFP text sets a judge's expectation that the README has to meet head on rather than dodge.
 - The whitepaper, "Scalable Compliant Privacy on Starknet", is at https://eprint.iacr.org/2026/474 if the note or channel model needs settling.
+
+
+---
+
+## (c) Proving and discovery endpoints, researched 15 August 2026
+
+**No proving service endpoint is published anywhere, on any network. Neither is a
+discovery endpoint.** This is the finding, and it is not a gap in our searching.
+
+### What the proving provider is
+
+Not a general zkVM, and nothing SP1-like is substitutable. `ProofProviderConfig` in
+`sdk/src/interfaces.ts:124` is an HTTP client config: `url`, `chainId`,
+`requestTimeoutMs` (default 30000), `blockIdentifier`, optional `nodeUrl` for the
+pool nonce, an `ohttp` option, and a `retry` policy for service-busy `-32005` and
+HTTP 503. The proofs are of the pool's own circuits, verified in-protocol by
+Starknet. Either you point at someone's proving service or you self-host the
+`starknet_transaction_prover` crate from the sequencer repo.
+
+### Evidence that no endpoint exists
+
+1. `docs/MAINNET-DAY-0.md` in the sprint repo states plainly that two values are
+   still missing from it: the mainnet discovery/indexer URL and the mainnet proving
+   service URL, that they "come from StarkWare and will be filled in here before
+   August 14", and "Don't guess at endpoints". As of 15 August the document still
+   carries that notice.
+2. Every prover and discovery URL across the Privacy SDK, awesome-strk20, the
+   starter kit and the docs is a placeholder: `prover.example.com`, `prover.test`,
+   `indexer.example.com`, `indexer.test`. There are no others.
+3. No issue on the sprint repository has asked about it, and no other registered
+   project publishes one.
+4. `strk20-by-example.org/sdk/proving-config` is the page that would settle it. That
+   host has refused connections on three consecutive days. DNS resolves to
+   76.76.21.21, the connection is refused.
+
+**One statement in the Day 0 guide is wrong and will cost someone an afternoon.**
+It says the starter kit ships hosted Sepolia endpoints for both. It does not. The
+starter kit is the Wallet API route: `WalletAccountV6`, and its `.env.example`
+contains only an Alchemy RPC key. It needs no prover URL and no discovery URL
+because the user's wallet does the proving.
+
+### Why this matters more than the anonymizer question
+
+The SDK route needs a prover URL and a discovery URL. Both are unpublished. So
+option A is now blocked on StarkWare for **two** things, the anonymizer deployment
+and these endpoints, not one.
+
+The Wallet API route needs neither. That is the entire reason the starter kit runs
+with nothing but an Alchemy key. It also cannot mint sub-accounts, which is why
+Sealed chose the SDK route in the first place.
+
+So the trade is sharper than it was: sub-accounts cost us two external
+dependencies that nobody outside StarkWare can supply, and both are currently
+missing. Option B, funding a fresh ordinary account by unshielding, sits on the
+Wallet API route and needs neither endpoint. Verifying B is now clearly worth the
+half hour it costs.
+
+### Other findings from the Day 0 guide, all load-bearing
+
+- **Mainnet values, verified against the live network:** `CHAIN_ID=SN_MAIN`,
+  `RPC_URL=https://rpc.starknet.lava.build`,
+  `POOL_ADDRESS=0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a`.
+- **Private transactions are submitted by rotating shared relayers.** The sender on
+  chain is a relayer with a nonce in the hundreds of thousands, and the user's
+  address appears nowhere in calldata or signature. This removes the gas-payer leak
+  that the private-escrow notes flagged and that Sealed's section 8 does not
+  currently mention. It should be mentioned, as a strength.
+- **Deposits are screened.** A compliance provider screens the depositing address
+  and signs every deposit, and the pool verifies that signature on chain. It is
+  mandatory and running your own prover does not bypass it. That is a third party
+  in the shield path and belongs in `PRIVACY.md`.
+- **The proving service sees your requests.** The `ohttp` option exists to wrap them
+  in Oblivious HTTP. Without it the prover operator is an observer. Also a
+  `PRIVACY.md` item, and OHTTP should probably be on by default.
+- **Eligibility is checked against `user_addr` in the pool's `Deposit` event**, not
+  the transaction sender, precisely because of the relayer behaviour above.
+- **`strk20.starknet.io/app` performs registration and shielding through a UI.**
+  That is a no-code path to qualifying mainnet transactions for `strk20.json`,
+  independent of whether Sealed's own flow is finished.
+- Shielding is public: depositor address, token, and amount. Matches what Sealed
+  already documents.
+- The guide's own advice on positioning: "Claim identity privacy; never claim
+  amount privacy." Sealed's corrected line 3 already does exactly this.
