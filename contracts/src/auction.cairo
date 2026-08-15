@@ -86,6 +86,16 @@ pub enum EntryStatus {
     Claimed,
 }
 
+/// Must match `privacy::objects::OpenNoteDeposit` positionally. The pool
+/// deserialises whatever `privacy_invoke` returns using its own definition, so
+/// field order is part of the ABI contract, not a local choice.
+#[derive(Drop, Serde, Copy)]
+pub struct OpenNoteDeposit {
+    pub note_id: felt252,
+    pub token: ContractAddress,
+    pub amount: u128,
+}
+
 #[derive(Drop, Serde, Copy, starknet::Store)]
 pub struct Entry {
     pub bid_commitment: felt252,
@@ -97,6 +107,9 @@ pub struct Entry {
 #[starknet::interface]
 pub trait ISealedAuction<TContractState> {
     fn commit(ref self: TContractState, bid_commitment: felt252, claim_handle: felt252);
+    fn privacy_invoke(
+        ref self: TContractState, bid_commitment: felt252, claim_handle: felt252,
+    ) -> Span<OpenNoteDeposit>;
     fn reveal(ref self: TContractState, amount: u256, bid_salt: felt252, claim_handle: felt252);
     fn settle(ref self: TContractState);
     fn claim(ref self: TContractState, claim_secret: felt252, payout_address: ContractAddress);
@@ -112,6 +125,7 @@ pub trait ISealedAuction<TContractState> {
     fn get_commitment_count(self: @TContractState) -> u32;
     fn get_revealed_count(self: @TContractState) -> u32;
     fn get_collateral(self: @TContractState) -> u256;
+    fn get_escrowed(self: @TContractState) -> u256;
 }
 
 #[starknet::contract]
@@ -122,7 +136,7 @@ pub mod SealedAuction {
     };
     use starknet::{ContractAddress, get_block_timestamp, get_caller_address, get_contract_address};
     use super::super::erc20::{IERC20Dispatcher, IERC20DispatcherTrait};
-    use super::{AuctionState, Entry, EntryStatus};
+    use super::{AuctionState, Entry, EntryStatus, OpenNoteDeposit};
 
     pub mod errors {
         pub const NOT_OPEN: felt252 = 'auction not open';
@@ -143,6 +157,8 @@ pub mod SealedAuction {
         pub const BAD_DEADLINES: felt252 = 'bad deadlines';
         pub const ZERO_COLLATERAL: felt252 = 'zero collateral';
         pub const RESERVE_ABOVE_COLLATERAL: felt252 = 'reserve above collateral';
+        pub const NOT_POOL: felt252 = 'caller not pool';
+        pub const NOT_RECEIVED: felt252 = 'collateral not received';
     }
 
     #[storage]
@@ -151,6 +167,12 @@ pub mod SealedAuction {
         seller_handle: felt252,
         seller_claimed: bool,
         token: ContractAddress,
+        // The privacy pool, the only address allowed to call privacy_invoke.
+        // Stored at construction and never taken from calldata.
+        pool: ContractAddress,
+        // Total collateral this contract has accepted. Both commit paths verify
+        // arrival against this rather than trusting any caller-supplied amount.
+        escrowed: u256,
         reserve_price: u256,
         collateral: u256,
         close_time: u64,
@@ -221,6 +243,7 @@ pub mod SealedAuction {
         ref self: ContractState,
         seller_handle: felt252,
         token: ContractAddress,
+        pool: ContractAddress,
         reserve_price: u256,
         collateral: u256,
         close_time: u64,
@@ -234,6 +257,7 @@ pub mod SealedAuction {
 
         self.seller_handle.write(seller_handle);
         self.token.write(token);
+        self.pool.write(pool);
         self.reserve_price.write(reserve_price);
         self.collateral.write(collateral);
         self.close_time.write(close_time);
@@ -248,28 +272,55 @@ pub mod SealedAuction {
         /// The amount pulled is identical for every bidder, which is what stops
         /// the visible ERC20 leg from leaking the bid.
         fn commit(ref self: ContractState, bid_commitment: felt252, claim_handle: felt252) {
-            assert(self.state.read() == AuctionState::Open, errors::NOT_OPEN);
-            assert(get_block_timestamp() < self.close_time.read(), errors::CLOSED);
-            assert(
-                self.entries.entry(claim_handle).read().bid_commitment == 0,
-                errors::DUPLICATE_HANDLE,
-            );
+            self.assert_can_commit(claim_handle);
 
             // Recorded before the transfer. A reentrant token calling back
             // into commit sees this handle already taken, and if the transfer
             // fails the whole transaction reverts, so the entry cannot outlive
             // its collateral.
-            self
-                .entries
-                .entry(claim_handle)
-                .write(Entry { bid_commitment, amount: 0, revealed: false, claimed: false });
-            self.commitment_count.write(self.commitment_count.read() + 1);
+            self.record_entry(bid_commitment, claim_handle);
 
             let ok = IERC20Dispatcher { contract_address: self.token.read() }
                 .transfer_from(get_caller_address(), get_contract_address(), self.collateral.read());
             assert(ok, errors::TRANSFER_FAILED);
 
+            // Belt and braces. A token whose transfer_from returns true without
+            // moving anything would otherwise create an unfunded entry.
+            self.take_collateral();
+
             self.emit(Event::Committed(Committed { claim_handle }));
+        }
+
+        /// The same commitment, funded by the privacy pool instead of by an
+        /// approval from the bidder.
+        ///
+        /// The pool calls this through `selector!("privacy_invoke")` in the same
+        /// transaction as a `withdraw` action that has already moved the
+        /// collateral here. The bidder therefore never needs a funded public
+        /// account, and the only public leg is the pool's own transaction.
+        ///
+        /// **No amount is taken from calldata.** The reference escrow helper
+        /// trusts a caller-supplied amount, but the user composes the action
+        /// array, so a withdraw of 1 paired with an invoke claiming 100 would be
+        /// accepted. `take_collateral` verifies arrival against this contract's
+        /// own ledger instead, which cannot be influenced by the caller.
+        ///
+        /// Returns an empty span: no note is created and nothing is carried
+        /// across time. Collateral stays here as ordinary ERC20 until `claim`.
+        fn privacy_invoke(
+            ref self: ContractState, bid_commitment: felt252, claim_handle: felt252,
+        ) -> Span<OpenNoteDeposit> {
+            assert(get_caller_address() == self.pool.read(), errors::NOT_POOL);
+            self.assert_can_commit(claim_handle);
+
+            // Value first, then the entry. The pool has already transferred, so
+            // unlike `commit` there is no external call left to make and nothing
+            // to reenter.
+            self.take_collateral();
+            self.record_entry(bid_commitment, claim_handle);
+
+            self.emit(Event::Committed(Committed { claim_handle }));
+            array![].span()
         }
 
         /// Open a commitment. `claim_secret` is deliberately not involved: a
@@ -467,10 +518,58 @@ pub mod SealedAuction {
         fn get_collateral(self: @ContractState) -> u256 {
             self.collateral.read()
         }
+
+        fn get_escrowed(self: @ContractState) -> u256 {
+            self.escrowed.read()
+        }
     }
 
     #[generate_trait]
     impl InternalImpl of InternalTrait {
+        /// Phase and uniqueness checks shared by both commit paths.
+        ///
+        /// Reusing a handle would overwrite the first bidder's entry and strand
+        /// their collateral, since payouts are keyed by handle alone.
+        fn assert_can_commit(self: @ContractState, claim_handle: felt252) {
+            assert(self.state.read() == AuctionState::Open, errors::NOT_OPEN);
+            assert(get_block_timestamp() < self.close_time.read(), errors::CLOSED);
+            assert(
+                self.entries.entry(claim_handle).read().bid_commitment == 0,
+                errors::DUPLICATE_HANDLE,
+            );
+        }
+
+        /// Record the entry. Identical for both paths, so a reveal or a claim
+        /// cannot tell which one funded it.
+        fn record_entry(ref self: ContractState, bid_commitment: felt252, claim_handle: felt252) {
+            self
+                .entries
+                .entry(claim_handle)
+                .write(Entry { bid_commitment, amount: 0, revealed: false, claimed: false });
+            self.commitment_count.write(self.commitment_count.read() + 1);
+        }
+
+        /// Verify that one more collateral has actually arrived, then account
+        /// for it.
+        ///
+        /// This is the whole defence of invariant 1 on the pool-funded path.
+        /// `escrowed` only ever grows by `collateral`, and only when the token
+        /// balance can cover it, so `escrowed` is always backed.
+        ///
+        /// Tolerated deliberately: an outright donation of `collateral` to this
+        /// address can fund one entry that made no withdraw. That is not a loss.
+        /// The donor paid exactly what the entry is worth and the funds are
+        /// distributed by the normal rules. Detecting it would require trusting
+        /// a caller-supplied amount, which is the weakness this avoids.
+        fn take_collateral(ref self: ContractState) {
+            let collateral = self.collateral.read();
+            let escrowed = self.escrowed.read();
+            let balance = IERC20Dispatcher { contract_address: self.token.read() }
+                .balance_of(get_contract_address());
+            assert(balance >= escrowed + collateral, errors::NOT_RECEIVED);
+            self.escrowed.write(escrowed + collateral);
+        }
+
         /// Second-highest valid bid, or the reserve when only one bid was
         /// valid. Zero when nobody revealed, since there is no sale.
         fn clearing_price(self: @ContractState) -> u256 {

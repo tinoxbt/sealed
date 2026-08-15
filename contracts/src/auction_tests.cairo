@@ -24,6 +24,11 @@ mod tests {
 
     const SELLER_SECRET: felt252 = 'seller_secret';
 
+    /// Stand-in for the privacy pool. Only this address may call privacy_invoke.
+    fn POOL() -> ContractAddress {
+        addr('privacy_pool')
+    }
+
     fn addr(v: felt252) -> ContractAddress {
         v.try_into().unwrap()
     }
@@ -50,6 +55,7 @@ mod tests {
         let mut calldata: Array<felt252> = array![];
         seller_handle.serialize(ref calldata);
         token_address.serialize(ref calldata);
+        POOL().serialize(ref calldata);
         RESERVE.serialize(ref calldata);
         COLLATERAL.serialize(ref calldata);
         CLOSE.serialize(ref calldata);
@@ -446,6 +452,145 @@ mod tests {
         auction.settle();
     }
 
+    // ---- The pool-funded commit path ----
+    //
+    // The pool moves collateral here with a withdraw action, then calls
+    // privacy_invoke in the same transaction. These tests stand in for that by
+    // transferring to the auction and then calling as the pool.
+
+    /// Simulate the pool's withdraw leg, then its invoke.
+    fn do_pool_commit(
+        auction: ISealedAuctionDispatcher,
+        token: IMockERC20Dispatcher,
+        auction_address: ContractAddress,
+        amount_delivered: u256,
+        bid: u256,
+        salt: felt252,
+        secret: felt252,
+        payout: ContractAddress,
+    ) -> felt252 {
+        token.mint(POOL(), amount_delivered);
+        start_cheat_caller_address(token.contract_address, POOL());
+        token.transfer(auction_address, amount_delivered);
+        stop_cheat_caller_address(token.contract_address);
+
+        let ch = handle(secret, payout);
+        let commitment = commitment(bid, salt, ch);
+        start_cheat_caller_address(auction.contract_address, POOL());
+        auction.privacy_invoke(commitment, ch);
+        stop_cheat_caller_address(auction.contract_address);
+        ch
+    }
+
+    // Only the pool may call it. Anyone else could otherwise mint an entry
+    // against collateral someone else delivered.
+    #[test]
+    #[should_panic(expected: 'caller not pool')]
+    fn privacy_invoke_rejects_non_pool() {
+        let b1 = addr('b1');
+        let (auction, token, auction_address) = setup(array![b1].span());
+
+        token.mint(auction_address, COLLATERAL);
+        start_cheat_caller_address(auction.contract_address, b1);
+        auction.privacy_invoke('commitment', 'handle');
+    }
+
+    // The heart of it. The pool delivers less than the collateral, so the entry
+    // must not be created. This is the case the reference escrow helper would
+    // accept, because it trusts the amount in calldata.
+    #[test]
+    #[should_panic(expected: 'collateral not received')]
+    fn privacy_invoke_rejects_short_delivery() {
+        let b1 = addr('b1');
+        let (auction, token, auction_address) = setup(array![b1].span());
+
+        do_pool_commit(
+            auction, token, auction_address, COLLATERAL - 1, 500, 'salt1', 'sec1', addr('p1'),
+        );
+    }
+
+    // Delivering nothing at all is the same failure.
+    #[test]
+    #[should_panic(expected: 'collateral not received')]
+    fn privacy_invoke_rejects_no_delivery() {
+        let b1 = addr('b1');
+        let (auction, token, auction_address) = setup(array![b1].span());
+
+        let ch = handle('sec1', addr('p1'));
+        start_cheat_caller_address(auction.contract_address, POOL());
+        auction.privacy_invoke('commitment', ch);
+    }
+
+    // A second invoke cannot ride on the first one's collateral. escrowed has
+    // already absorbed it, so the balance no longer covers another entry.
+    #[test]
+    #[should_panic(expected: 'collateral not received')]
+    fn privacy_invoke_cannot_reuse_one_delivery() {
+        let b1 = addr('b1');
+        let (auction, token, auction_address) = setup(array![b1].span());
+
+        do_pool_commit(auction, token, auction_address, COLLATERAL, 500, 'salt1', 'sec1', addr('p1'));
+
+        let ch2 = handle('sec2', addr('p2'));
+        start_cheat_caller_address(auction.contract_address, POOL());
+        auction.privacy_invoke('commitment2', ch2);
+    }
+
+    // Phase rules apply identically to both paths.
+    #[test]
+    #[should_panic(expected: 'bidding closed')]
+    fn privacy_invoke_after_close_rejected() {
+        let b1 = addr('b1');
+        let (auction, token, auction_address) = setup(array![b1].span());
+
+        start_cheat_block_timestamp_global(CLOSE);
+        do_pool_commit(auction, token, auction_address, COLLATERAL, 500, 'salt1', 'sec1', addr('p1'));
+    }
+
+    // An entry funded by the pool behaves exactly like one funded by approve:
+    // it reveals, wins, and claims the same way.
+    #[test]
+    fn pool_funded_entry_is_indistinguishable() {
+        let b1 = addr('b1');
+        let (auction, token, auction_address) = setup(array![b1].span());
+
+        let payout = addr('p1');
+        let ch = do_pool_commit(
+            auction, token, auction_address, COLLATERAL, 500, 'salt1', 'sec1', payout,
+        );
+
+        assert(auction.get_commitment_count() == 1, 'counted');
+        assert(auction.get_escrowed() == COLLATERAL, 'escrowed');
+        assert(auction.get_entry_status(ch) == EntryStatus::Committed, 'committed');
+
+        start_cheat_block_timestamp_global(CLOSE + 1);
+        auction.reveal(500, 'salt1', ch);
+        start_cheat_block_timestamp_global(DEADLINE + 1);
+        auction.settle();
+
+        assert(auction.get_winner_handle() == ch, 'won');
+        // Sole valid bid, so the clearing price is the reserve.
+        assert(auction.get_clearing_price() == RESERVE, 'clears at reserve');
+
+        auction.claim('sec1', payout);
+        assert(token.balance_of(payout) == COLLATERAL - RESERVE, 'refund');
+    }
+
+    // Invariant 1 across a mixed auction. Both paths must feed the same ledger.
+    #[test]
+    fn invariant_1_holds_across_mixed_paths() {
+        let b1 = addr('b1');
+        let (auction, token, auction_address) = setup(array![b1].span());
+
+        do_commit(auction, b1, 500, 'salt1', 'sec1', addr('p1'));
+        do_pool_commit(auction, token, auction_address, COLLATERAL, 600, 'salt2', 'sec2', addr('p2'));
+        do_commit(auction, b1, 700, 'salt3', 'sec3', addr('p3'));
+
+        assert(auction.get_commitment_count() == 3, 'three entries');
+        assert(auction.get_escrowed() == COLLATERAL * 3, 'escrowed three');
+        assert(token.balance_of(auction_address) == COLLATERAL * 3, 'balance matches');
+    }
+
     // Invariant 5, fuzzed. The running top-two update has to be right for
     // reveals arriving in any order, including ties and duplicates.
     #[test]
@@ -527,7 +672,7 @@ mod tests {
     // bid vector is fuzzed rather than hand-picked.
     #[test]
     #[fuzzer]
-    fn fuzz_invariant_8_conservation(a: u8, b: u8, c: u8) {
+    fn fuzz_invariant_8_conservation(a: u8, b: u8, c: u8, paths: u8) {
         let a: u256 = RESERVE + a.into();
         let b: u256 = RESERVE + b.into();
         let c: u256 = RESERVE + c.into();
@@ -537,12 +682,28 @@ mod tests {
         let b3 = addr('b3');
         let (auction, token, auction_address) = setup(array![b1, b2, b3].span());
 
-        let h1 = do_commit(auction, b1, a, 'salt1', 'sec1', addr('p1'));
-        let h2 = do_commit(auction, b2, b, 'salt2', 'sec2', addr('p2'));
-        do_commit(auction, b3, c, 'salt3', 'sec3', addr('p3'));
+        // Low three bits of `paths` choose how each bidder funds its entry, so
+        // all eight combinations of approve and pool funding are covered.
+        // Conservation must not depend on which path was used.
+        let h1 = if paths & 1 == 0 {
+            do_commit(auction, b1, a, 'salt1', 'sec1', addr('p1'))
+        } else {
+            do_pool_commit(auction, token, auction_address, COLLATERAL, a, 'salt1', 'sec1', addr('p1'))
+        };
+        let h2 = if paths & 2 == 0 {
+            do_commit(auction, b2, b, 'salt2', 'sec2', addr('p2'))
+        } else {
+            do_pool_commit(auction, token, auction_address, COLLATERAL, b, 'salt2', 'sec2', addr('p2'))
+        };
+        if paths & 4 == 0 {
+            do_commit(auction, b3, c, 'salt3', 'sec3', addr('p3'));
+        } else {
+            do_pool_commit(auction, token, auction_address, COLLATERAL, c, 'salt3', 'sec3', addr('p3'));
+        }
 
         let escrowed = COLLATERAL * 3;
         assert(token.balance_of(auction_address) == escrowed, 'escrowed');
+        assert(auction.get_escrowed() == escrowed, 'ledger matches balance');
 
         start_cheat_block_timestamp_global(CLOSE + 1);
         auction.reveal(a, 'salt1', h1);
