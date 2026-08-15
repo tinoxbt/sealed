@@ -1,6 +1,7 @@
 /// Sepolia deployment. One auction, one token, one round.
+/// Bidding closes 23 August 2026, reveal deadline 24 August.
 export const AUCTION_ADDRESS =
-  "0x018c2c1b5c56094e52001fe37e9aba5f1475cf2c222a763da0edd136afda1325";
+  "0x05a58d32d426ddbf37e376c5668991168cb2e0d19cc017d5158d4836a088f7b8";
 
 /// STRK. Same address on Sepolia and mainnet.
 export const TOKEN_ADDRESS =
