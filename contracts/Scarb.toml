@@ -1,0 +1,13 @@
+[package]
+name = "sealed"
+version = "0.1.0"
+edition = "2024_07"
+
+[dependencies]
+starknet = "2.8.4"
+
+[dev-dependencies]
+snforge_std = "0.63.0"
+
+[[target.starknet-contract]]
+sierra = true

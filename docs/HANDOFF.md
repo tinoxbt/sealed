@@ -233,7 +233,19 @@ downloads were already absent. Generated `web/dist` and
 
 Scarb was installed through Homebrew. The resolved local versions are Scarb 2.20.0,
 Cairo 2.20.0, Sierra 1.9.3, on aarch64-apple-darwin. `Scarb.lock` was generated.
-Starknet Foundry is still not installed, so Step 1 is not complete.
+Starknet Foundry 0.63.0 was installed through its official installer, downloaded
+and inspected before execution, then run as `sh install.sh` followed by
+`snfoundryup`. `snforge` is at `/Users/tino/.local/bin/snforge`, symlinked from
+`~/.local/share/starknet-foundry-install/0.63.0/bin/snforge`, and resolves in a
+normal login zsh shell. The installer appended a PATH line to `~/.zshenv` and
+touched nothing else outside it.
+
+With the manifest still pinned at `snforge_std 0.32.0`, `snforge test` failed at
+exit 2 before reaching any Cairo: `snforge_scarb_plugin 0.32.1` pulls
+`size-of 0.1.5`, which declares `stdcall` and `fastcall` ABIs unconditionally and
+fails to compile under rustc 1.97.1 on aarch64 with E0570. Aligning the dev
+dependency from `snforge_std 0.32.0` to `0.63.0` resolved it. The lockfile now
+resolves both `snforge_std` and `snforge_scarb_plugin` at 0.63.0.
 
 The provisional OpenZeppelin v0.17.0 dependency failed under Cairo 2.20.0 inside
 the dependency graph. The auction does not import OpenZeppelin, so the unused
@@ -247,3 +259,10 @@ fixture. `npm run vectors` passes all four. `npm run vectors:negative` flips one
 in the first expected handle and fails with `zero: claim handle mismatch`, proving
 the web-side check can go red. Cairo has not read or verified the fixture yet, so
 Step 2 is not complete.
+
+The auction sketch is currently excluded from `lib.cairo` while the toolchain gate
+is established. A current-Cairo hello-world contract and smoke test now exist in
+`contracts/src/hello.cairo` and `contracts/src/tests.cairo`; `scarb build` passes.
+`snforge test` collected and passed `hello_world_smoke_test`: one passed, zero
+failed. Step 1's executable toolchain gate is therefore working. The OpenZeppelin
+version remains to be resolved before Step 1 can be logged as fully complete.
