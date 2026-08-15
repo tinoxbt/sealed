@@ -262,9 +262,14 @@ Starknet. Either you point at someone's proving service or you self-host the
    `indexer.example.com`, `indexer.test`. There are no others.
 3. No issue on the sprint repository has asked about it, and no other registered
    project publishes one.
-4. `strk20-by-example.org/sdk/proving-config` is the page that would settle it. That
-   host has refused connections on three consecutive days. DNS resolves to
-   76.76.21.21, the connection is refused.
+4. `strk20-by-example.org/sdk/proving-config` is the page that would settle it. The
+   host refuses connections, but **its source is public and MIT licensed** at
+   `Akashneelesh/strk20-by-example`, and the page is now vendored in
+   `docs/reference/strk20-docs.md`. It supplies no endpoint either: the example
+   reads `process.env.PROVING_SERVICE_URL!`, which the integrator provides.
+5. The official integration skill at `starkience/strk20-agent-skills`, Apache 2.0,
+   carries route guides for the SDK, wallet API and anonymizer routes. It contains
+   no endpoint either.
 
 **One statement in the Day 0 guide is wrong and will cost someone an afternoon.**
 It says the starter kit ships hosted Sepolia endpoints for both. It does not. The
@@ -314,3 +319,32 @@ half hour it costs.
   already documents.
 - The guide's own advice on positioning: "Claim identity privacy; never claim
   amount privacy." Sealed's corrected line 3 already does exactly this.
+
+
+### Two things this research unblocked
+
+**The docs are no longer unreachable.** `strk20-by-example.org` is a static site
+whose source is public and MIT licensed. All 31 pages are vendored at
+`docs/reference/strk20-docs.md` with attribution. The step 0 item that failed for
+three days is closed, and it did not need the host to come back.
+
+**There is an official agent skill for this integration**,
+`starkience/strk20-agent-skills`, Apache 2.0, with separate reference guides for
+the SDK route, the wallet API route and the anonymizer route, plus a plan template.
+It is listed in awesome-strk20 under Guides and Docs. Worth reading before
+committing to a route, and worth noting we are not currently using it.
+
+### The pattern the docs actually recommend for own-prover teams
+
+From the proving-config page:
+
+> Teams running their own prover typically shield through a privacy-enabled wallet
+> (Ready or Xverse) and then transfer privately to the account their integration
+> controls.
+
+That is a hybrid, and it matters for Sealed. Shielding is the leg that is screened,
+and the screening provider is named: FPI screens the depositing address and signs
+the deposit, which the pool verifies on chain. Self-hosting a prover does not
+bypass it. So the recommended shape is wallet for the deposit, SDK for everything
+after. Sealed does not have to solve direct deposits at all, which removes one
+worry from the SDK route even though the endpoint problem remains.
