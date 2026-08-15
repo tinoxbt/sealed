@@ -480,3 +480,87 @@ the ones that matter:
 
 The auction contract itself is unaffected either way. It receives ERC20 and pays to
 a committed address, and knows nothing about how value arrives.
+
+## (d) Option B verified, and a better option found
+
+Checked 15 August 2026 against `@starknet-io/types-js` `src/wallet-api/components.ts`
+and `strk20-starter-kit`.
+
+### B works
+
+`STRK20_WITHDRAW_ACTION` is `{ type, token, amount, recipient: ADDRESS }`, documented
+as "Withdraws funds from the privacy pool to a public recipient address". The
+recipient is an arbitrary address, not forced to self. Compare
+`STRK20_DEPOSIT_ACTION`, which is documented "Always to self" and has no recipient
+field, so the asymmetry is deliberate.
+
+The SDK agrees: `TokenOperationsBuilder.withdraw(...outputs: WithdrawOutput[])`,
+"Withdraw this token to one or more public addresses", with
+`WithdrawOutput = { recipient?: StarknetAddress; amount: Amount }`.
+
+So a bidder can unshield the uniform collateral straight to a fresh ordinary
+account with no public link to their main wallet, and that account can then
+`approve` and `commit`. No sub-accounts, no anonymizer, no self-hosted prover,
+because withdraw is in the Wallet API action union and the wallet proves it.
+
+### The action union composes, which makes B obsolete
+
+The union has four members and a dapp submits an array of them as **one** STRK20
+transaction. `strk20-starter-kit` composes exactly this in its echo flow:
+
+```
+{ type: "withdraw", token, amount, recipient: helper },
+{ type: "transfer", token, amount: "OPEN", recipient: user },
+{ type: "invoke",   contract: helper, calldata: [token, "${poolAddress}", "${openNoteIds[0]}"] }
+```
+
+`STRK20_INVOKE_ACTION` carries `contract` and `calldata` but **no selector**, because
+the pool always calls `selector!("privacy_invoke")`. The target must implement that
+entrypoint.
+
+For Sealed the commit leg becomes two actions instead of two transactions:
+
+```
+{ type: "withdraw", token: STRK, amount: collateral, recipient: auction },
+{ type: "invoke",   contract: auction, calldata: [bid_commitment, claim_handle] }
+```
+
+The pool moves the collateral and calls the auction in the same transaction. No
+`transfer OPEN` action is needed, because commit returns an empty
+`Span<OpenNoteDeposit>` and the collateral stays in the auction contract.
+
+| | Public legs into the auction | Fresh account needed | Gas funded by | Prover |
+| --- | --- | --- | --- | --- |
+| A, sub-accounts | 1 | no | pool relayer | self-hosted |
+| B, unshield to fresh account | 2 | yes, deployed and gas-funded | the fresh account | wallet |
+| D, withdraw plus invoke | 1 | no | wallet, through the pool | wallet |
+
+D matches A's on-chain footprint, needs no prover, and makes the auction contract
+itself an anonymizer contract, which is one of the five things the judging criteria
+name.
+
+### Why this does not contradict the v1 non-negotiable
+
+`CLAUDE.md` rules out `privacy_invoke` custody in v1 because multi-user custody
+across time was unverified. The specific unknown was whether a `note_id` from a
+deposit at T0 can be carried forward and filled by an independent claim at T1.
+
+D does not need that. `commit` returns an empty span, and `claim` pays a public
+address by ordinary ERC20 transfer, exactly as the contract does today. No note is
+ever carried across time. The auction keeps its own ledger, keyed by `claim_handle`,
+and the twelve invariants are untouched.
+
+Adopting D is still a scope decision and needs an explicit instruction, since it
+changes a documented non-negotiable.
+
+### Security note if D is adopted
+
+The reference escrow helper takes the deposited `amount` from calldata and trusts
+it, guarded only by `caller == pool`. But the user composes the action array, so
+nothing visible in that contract stops a withdraw of 1 with an invoke claiming 100.
+Whether the pool cross-checks the two is not documented here, and Sealed should not
+depend on it either way.
+
+Sealed's `commit` must therefore verify arrival rather than trust calldata: assert
+`token.balance_of(auction) >= collateral * (commitment_count + 1)`. That keeps
+invariant 1 true by construction and costs one storage read and one balance call.
