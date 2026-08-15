@@ -54,23 +54,72 @@ Also worth lifting: the private-escrow README publishes a per-on-chain-artifact 
 
 ## (b) SDK-route sub-account creation
 
-**No reference material found. This is now the sharpest risk on the project.**
+**Answered 15 August 2026, step 0. The primitive exists. The custody model in `ARCHITECTURE.md` section 2 does not match how it works.**
 
-`grep -ri "sub_account|subaccount|sub-account"` across both repositories returns nothing. Neither the awesome list nor the starter kit mentions sub-accounts, `sub_account_anonymizer`, or the `transfers.build().subaccounts(dappName).invoke(...)` call in section 7 of the architecture.
+Source: `https://github.com/starkware-libs/starknet-privacy`, cloned and checked out at tag `PRIVACY-0.14.3-RC.4`, commit `722d1cf`, dated 22 July 2026. The pinned version is real and the repository is public. All line references below are at that tag.
 
-What the starter kit does instead is the **Wallet API route**, not the SDK route: `WalletAccountV6` with starknet.js v10, `get-starknet` v6 discovery, and shield, unshield, private transfer, and balance operations performed through the user's wallet so the app never touches a viewing key. Useful, but a different integration route from the one Sealed depends on, and the architecture already records that the Wallet API sub-account route is unavailable.
+### The API exists, with a different signature than section 7 assumes
 
-The awesome list positions the two routes explicitly: the Privacy SDK is the low-level route for wallets and advanced integrators, and normal dapps should use the Privacy Wallet API. Sealed is deliberately on the low-level route because it needs to mint sub-accounts itself rather than ask a user's wallet for one. That choice is sound and it is also the reason no example exists to copy.
+`sdk/src/interfaces.ts:727` declares `subaccounts(dappName: string | BigNumberish): SubAccountsBuilder` on `PrivateTransfersBuilder`. The builder itself is at `sdk/src/interfaces.ts:534`, with three methods:
 
-Consequences:
+- `partialCommitment(): Promise<bigint>`, returning `hash(identity_key, dappName)`, computed locally in TypeScript with no contract call.
+- `commitment(nonce): Promise<bigint>`, returning `hash(partialCommitment, nonce)`, also local.
+- `invoke(nonce, { calls, collectPolicy? }): PrivateTransfersBuilder`.
 
-- The day 3 gate is load-bearing exactly as written and should not slip. It is the only evidence that the primitive works as documented.
-- The primary source is the Privacy SDK repository itself, https://github.com/starkware-libs/starknet-privacy, which was not part of this review. Read its `sdk/README.md` and grep for the subaccounts builder before day 3.
-- The pinned version, 0.14.3-rc.4, is a release candidate. Check it is actually published and installable before writing code against it.
-- Note the version tension: awesome-strk20 points at starknet.js v10.4.0 for STRK20 support, while `CLAUDE.md` pins starknet.js without a version. Pin it explicitly on day 1 alongside Scarb and snforge.
-- If the gate fails, the documented fallback is strk20-kit. The starter kit reviewed here is a reasonable base for that fallback: it already has the wallet picker, shield, unshield, and private transfer working through the Wallet API.
+Note the shape. It is `invoke(nonce, { calls })`, not the bare `invoke(...)` in section 7, and it returns the parent builder rather than a sub-account, so a call chain ends in `.execute()`. Implementation at `sdk/src/internal/builders.ts:226`. Working usage at `sdk/tests/internal/sub-accounts.test.ts:54`:
 
-Ask in the Cairo CoreStars Telegram, `@sncorestars`, or open an issue on the sprint repository, rather than burning day 3 on discovery. Both are listed as monitored daily.
+```
+await transfers.build().subaccounts(dappName).invoke(nonce, { calls }).execute()
+```
+
+`identify()` and `deployed()` are declared but not implemented at this version, per `sdk/CHANGELOG.md:17`.
+
+### What a sub-account actually is
+
+`packages/sub_account_anonymizer/src/sub_account_anonymizer.cairo:1-8` states it plainly. Each identity commitment maps to a dedicated `SubAccount` contract that performs the dapp calls and holds the resulting funds. Sub-accounts are real deployed contracts with addresses, deployed on first use, and `get_sub_accounts` (line 153) resolves `{nonce, address, is_deployed}` for a nonce range, returning the deterministic address a sub-account *would* deploy to before it exists.
+
+That last property is directly useful: **a payout sub-account address can be computed and bound into `claim_handle` at commit time without deploying it first**, which is exactly what `ARCHITECTURE.md` section 4 requires.
+
+Identity derivation is two-stage Poseidon, `hash(hash(identity_key, dapp_name), nonce)`, at lines 48 to 56. `dapp_name` scopes sub-accounts per dapp, `nonce` gives one identity many sub-accounts.
+
+### The problem: sub-accounts cannot transact on their own
+
+Line 7: "Driving interactions is restricted to the configured privacy contract." Line 113 makes it a precondition, and `UNAUTHORIZED_CALLER` at line 115 enforces it.
+
+A sub-account is not an account you send transactions from. The only way it acts is the pool calling `privacy_invoke_with_computation` on the anonymizer (line 126), which runs `calls` as the sub-account, then collects the requested tokens back out of it into the anonymizer, and approves the pool to pull them into open notes. One atomic transaction.
+
+`ARCHITECTURE.md` section 2 draws the collateral leg as the sub-account performing an ordinary `ERC20 transfer_from` into the auction contract, where it sits for days. That is not available as drawn. The sub-account can only act inside a pool-driven transaction.
+
+**This is survivable, and probably cheaply.** `open_notes` is a `Span<OpenNote>` and collection is per note, so an empty span collects nothing and no revert fires. `ZERO_BALANCE` (line 118) is per note, `NEGATIVE_DIFF` (line 120) only applies to `CollectPolicy::Diff`, and `INSUFFICIENT_BALANCE` (line 122) only to `Exact`. `sdk/tests/internal/sub-accounts.test.ts:150` executes an invoke with no open-note creation at all. So a commit should be expressible as: fund the sub-account by private transfer, then one pool-driven invoke whose `calls` are `approve` plus `commit` on the auction contract, with no open notes, leaving the collateral in the auction contract.
+
+That needs proving on Sepolia. It is the step 3 gate, and the gate should now be written as this specific transaction rather than the vaguer "sub-account calls your contract".
+
+The claim leg is unaffected: `claim` takes `(claim_secret, payout_address)` and can be sent by anyone, so it does not need to originate from a sub-account.
+
+### Setup required before any of this works
+
+- `subAccountAnonymizerAddress` in the `createPrivateTransfers` config, `sdk/src/factory.ts:51-54`. Calling `subaccounts(...)` without it throws, asserted at `sdk/tests/internal/sub-accounts.test.ts:160`.
+- The standard pool prerequisites the same factory config demands at `sdk/src/factory.ts:45-49`: `viewingKeyProvider`, `provingProvider`, `discoveryProvider`, and `poolContractAddress`.
+- Registration, channel and per-token subchannel setup, and a shielded balance to fund the sub-account from.
+
+### The finding that costs time
+
+**No deployed anonymizer address exists anywhere in the repository.** Every reference to `subAccountAnonymizerAddress` outside the factory definition is a test using a mock constant. There is no mainnet or Sepolia deployment recorded.
+
+`sub_account_anonymizer` is a Cairo package in this repository, so it can be built and deployed, but that means Sealed either deploys and maintains its own anonymizer or finds a canonical deployed one. Deploying our own is a Cairo contract we did not plan for, on top of the auction contract, and it is a contract that holds funds transiently. Ask in the Cairo CoreStars Telegram, `@sncorestars`, whether a canonical deployment exists before building one.
+
+### Verdict
+
+The identity claim survives. Sub-accounts are real, unlinkable, addressable in advance, and drivable from our own app through the SDK. Two things changed:
+
+1. The custody diagram in section 2 needs correcting. The collateral leg is a pool-driven invoke, not a standalone transfer from the sub-account.
+2. The anonymizer deployment is unresolved and is now the largest unknown on the critical path.
+
+Neither is a reason to fall back to strk20-kit. Both are reasons the step 3 gate should happen immediately.
+
+### Still unreachable
+
+`https://strk20-by-example.org/llms-full.txt` refused the connection again on 15 August 2026, `http_code=000`, zero bytes. `docs/reference/strk20-docs.md` still does not exist. This is the second failed attempt across two days, so treat the host as unavailable rather than temporarily down.
 
 ---
 
