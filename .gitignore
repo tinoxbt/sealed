@@ -1,0 +1,39 @@
+# Node
+node_modules/
+.pnp
+.pnp.js
+npm-debug.log*
+yarn-error.log*
+
+# Environment, never commit real keys
+.env
+.env.*
+!.env.example
+
+# Rust and Cairo build output
+target/
+.snfoundry_cache/
+# Scarb.lock is committed on purpose. Versions are pinned for the sprint.
+
+# Next.js
+.next/
+out/
+build/
+.vercel
+
+# TypeScript build output
+dist/
+
+# macOS
+.DS_Store
+
+# Credential files. Never commit any of these.
+*credentials*.json
+*-service-account*.json
+*.pem
+*.key
+
+# Stray download artifacts. A failed fetch can write its error page to a
+# file named after the platform it was requesting.
+/arm64
+/macOS
