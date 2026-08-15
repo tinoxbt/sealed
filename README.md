@@ -77,7 +77,8 @@ Day 2 of 17. Nothing is deployed yet.
 | Poseidon parity between Cairo and starknet.js | Done, shared fixture asserted on both sides |
 | Auction contract: commit, privacy_invoke, reveal, settle, claim | Done, 369 lines of code plus 156 of comment |
 | snforge tests covering all twelve invariants | Done, 31 passing, 2 fuzzed |
-| Day 3 gate: a composed withdraw plus privacy_invoke funds a commitment on Sepolia | Not started |
+| Auction deployed to Sepolia | Done, `0x018c2c1b...afda1325` |
+| Day 3 gate: a composed withdraw plus privacy_invoke funds a commitment on Sepolia | Contract live, bid flow not built |
 | Frontend, wallet wiring, secret backup | Not started |
 | Mainnet deployment and a live auction | Not started |
 | PRIVACY.md, MECHANISM.md, demo video | Not started, `HELPER_CUSTODY.md` done |

@@ -41,7 +41,9 @@ if [ -z "${SEALED_SELLER_HANDLE:-}" ]; then
 fi
 
 echo "Declaring SealedAuction on $NETWORK as $ACCOUNT"
-DECLARE_OUT=$(cd contracts && sncast --account "$ACCOUNT" declare \
+# --wait matters. Without it the deploy below runs before the class is
+# accepted on chain and fails with "Class with hash ... is not declared".
+DECLARE_OUT=$(cd contracts && sncast --wait --account "$ACCOUNT" declare \
   --network "$NETWORK" --contract-name SealedAuction 2>&1) || true
 echo "$DECLARE_OUT"
 
