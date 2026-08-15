@@ -1,6 +1,6 @@
 # Sealed: System Architecture
 
-Sealed-bid, second-price auctions on Starknet mainnet, with unlinkable bidders and private settlement through STRK20.
+Sealed-bid, second-price auctions on Starknet mainnet. Unlinkable bidders and private payout routing through STRK20, with a public settlement outcome.
 
 Status: locked for the STRK20 Private Sprint, 14 to 31 August 2026. Anything not in this document is out of scope.
 
@@ -340,7 +340,11 @@ sealed/
 
 ## 13. The day 3 gate
 
-The gate is now trivial by design: **an SDK-route sub-account, created by your app, calls a contract you wrote and transfers tokens into it.** If that is not working by end of day 3, the sub-account primitive is not usable as documented and Sealed's identity claim is gone.
+The gate is one specific transaction on Sepolia: **a pool-driven invocation of `sub_account_anonymizer` whose `calls` are `approve` on the token and `commit` on a contract we wrote, carrying an empty open-note span so the collateral stays in that contract.** If that is not working by end of day 3, the sub-account primitive is not usable for custody the way Sealed needs and the identity claim is gone.
+
+It was described as trivial when this document assumed the sub-account could perform an ordinary `transfer_from` on its own. Step 0 established that it cannot: the anonymizer restricts driving sub-accounts to the pool contract. The gate is now the riskiest thing on the critical path, not the cheapest.
+
+**It also has a prerequisite that is not ours to satisfy.** No canonical `sub_account_anonymizer` deployment has been found on Sepolia or mainnet, and the SDK requires a `subAccountAnonymizerAddress`. Either the protocol team confirms a deployed address, or Sealed deploys and maintains its own anonymizer, which is an unplanned second contract that transiently holds user funds. Ask in the Cairo CoreStars Telegram, `@sncorestars`, on day 1 rather than discovering it on day 3.
 
 **Fallback: strk20-kit,** a drop-in React component kit for shield, unshield, private transfer, and balance, plus a small mainnet reference app built from those components. No custom Cairo, same empty infrastructure lane, same documentation strength.
 
