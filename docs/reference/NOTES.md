@@ -117,6 +117,60 @@ The identity claim survives. Sub-accounts are real, unlinkable, addressable in a
 
 Neither is a reason to fall back to strk20-kit. Both are reasons the step 3 gate should happen immediately.
 
+### Step 3 groundwork, 15 August 2026
+
+Taken as far as it goes without Sepolia credentials. Four findings, two of which
+change the cost of the gate.
+
+**1. The Privacy SDK is not published to npm.** `npm view
+@starkware-libs/starknet-privacy-sdk` returns 404, as does the unscoped name. The
+package identifies itself as `@starkware-libs/starknet-privacy-sdk` at version
+0.14.3-rc.4 in `sdk/package.json`, but it exists only in the repository. Step 0
+recorded that the pinned version is real, which it is as a git tag. It is not
+installable from a registry. Sealed has to vendor the SDK, build it, and link it
+with `file:`, which is exactly what the reference apps in awesome-strk20 do.
+
+**2. It builds, and the sub-account route works at the SDK level.** `npm ci &&
+npm run build` in `sdk/` succeeds. The built entry point loads and exports
+`createPrivateTransfers` as a function plus `SubAccountAnonymizerABI`. Its own
+suite `tests/internal/sub-accounts.test.ts` runs 7 tests, all passing. That is
+runtime evidence rather than reading a type declaration.
+
+**3. No canonical anonymizer deployment, now confirmed rather than inferred.**
+`.github/workflows/e2e-devnet.yaml` lines 66 and 69 build `sub_account_anonymizer`
+from source and the harness deploys it. The project tests against an anonymizer it
+deploys itself. Sealed will have to do the same.
+
+**4. Deploying it means a second Cairo toolchain.** That workflow pins Scarb
+2.17.0 for the privacy workspace, and 2.11.4 for the vesu contracts. Sealed is
+pinned at 2.20.0. The anonymizer cannot simply be added to our package; it needs
+its own build with its own Scarb version.
+
+### What a gate run actually requires
+
+The gate was described as one transaction. It is one transaction on top of this:
+
+- a funded Sepolia account
+- a Starknet RPC endpoint
+- the SDK vendored and built from source
+- a proving provider, the `provingProvider` in the factory config
+- a discovery provider; the e2e harness builds and runs a Rust `discovery-service`
+- `sub_account_anonymizer` built under Scarb 2.17.0 and declared and deployed by us
+- viewing key registration, a channel, and a per-token subchannel
+- a shielded balance to fund the sub-account from
+
+**None of it can be run from this environment.** There are no accounts under
+`~/.sncast`, no `.env` anywhere in the repository, and no RPC key. The remaining
+work is credential and infrastructure setup, not code.
+
+The honest read: this is no longer a half-hour gate, and it is the single largest
+remaining risk. `ARCHITECTURE.md` section 13 says the instinct on day 10 will be to
+keep pushing and that the instinct is what loses sprints. The decision point is
+whether an anonymizer we deploy and maintain ourselves, plus a proving and
+discovery stack, is worth it for the identity claim, or whether the strk20-kit
+fallback buys most of the integration score for a fraction of the risk. That is a
+human decision and it should be made deliberately, not by drifting into day 10.
+
 ### Still unreachable
 
 `https://strk20-by-example.org/llms-full.txt` refused the connection again on 15 August 2026, `http_code=000`, zero bytes. `docs/reference/strk20-docs.md` still does not exist. This is the second failed attempt across two days, so treat the host as unavailable rather than temporarily down.

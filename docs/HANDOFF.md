@@ -265,7 +265,33 @@ span. Step 4 should treat `commitments_flat.txt` as fixed input.
 
 ### Step 3
 
-Not started.
+Groundwork done, gate not run, 15 August 2026. Everything that does not need
+credentials has been established; see `docs/reference/NOTES.md`.
+
+Confirmed by execution: the Privacy SDK is **not on npm**, 404 under both the
+scoped and unscoped names, so it has to be vendored and built from source. It does
+build, `npm ci && npm run build` succeeds, the entry point exports
+`createPrivateTransfers` and `SubAccountAnonymizerABI`, and its own
+`tests/internal/sub-accounts.test.ts` passes 7 of 7. The sub-account route works at
+the SDK level.
+
+Confirmed by reading the project's own CI: there is no canonical anonymizer
+deployment. `.github/workflows/e2e-devnet.yaml` builds `sub_account_anonymizer`
+from source and deploys it in the harness. Sealed has to do the same, and that
+workflow pins Scarb 2.17.0 for the privacy workspace against our 2.20.0, so it
+needs a separate build.
+
+The gate needs all of this before the one transaction: a funded Sepolia account, an
+RPC endpoint, the SDK vendored and built, a proving provider, a discovery provider
+(the harness runs a Rust `discovery-service`), our own deployed anonymizer, viewing
+key registration, a channel and per-token subchannel, and a shielded balance. None
+of it can run from this environment: no `~/.sncast` accounts, no `.env`, no RPC
+key.
+
+The remaining work is credentials and infrastructure, not code. It is also a real
+decision point rather than a task: an anonymizer we deploy and maintain plus a
+proving and discovery stack, against the strk20-kit fallback. Decide deliberately,
+early, and not on day 10.
 
 ### Step 4
 
