@@ -10,7 +10,7 @@ Status: locked for the STRK20 Private Sprint, 14 to 31 August 2026. Anything not
 
 | Dependency | Status | Consequence |
 | --- | --- | --- |
-| SDK-route private sub-accounts | **Confirmed.** Ships in Privacy SDK 0.14.3-rc.4, backed by `sub_account_anonymizer`. Usable because Sealed controls the SDK side rather than asking a user's wallet to mint one. | Load-bearing. This is the primitive the whole design now rests on. |
+| SDK-route private sub-accounts | **Confirmed.** Ships in Privacy SDK 0.14.3-rc.4, backed by `sub_account_anonymizer`. Sub-accounts act only inside pool-driven invocations. | Load-bearing. A canonical anonymizer deployment has not been found, so Step 3 must resolve or deploy one. |
 | Wallet API sub-account route | Not available | Does not block Sealed. Bidders onboard through the app, not through their existing wallet. |
 | Stateful helper custody across time | Documented via empty `Span<OpenNoteDeposit>`, with an unofficial escrow example | Not used in v1. See below. |
 | **Multi-user custody in one helper** | **Not established.** No documented example. The docs state helpers should be small, reviewable, and should not hold user funds long-term. | **Design changed to avoid it entirely.** |
@@ -18,7 +18,9 @@ Status: locked for the STRK20 Private Sprint, 14 to 31 August 2026. Anything not
 
 The multi-user custody question is the one that reshaped this document. Asking a helper to act as a multi-depositor escrow ledger runs against the protocol's stated intent for helpers, and no reference implementation demonstrates it. Building the auction on an unverified lifecycle would put the entire project behind a question only the protocol engineers can answer.
 
-**v1 therefore does not use `privacy_invoke` custody at all.**
+**v1 does not use helper custody.** The auction contract holds ordinary ERC20. A
+pool-driven sub-account invocation is still required to perform the bidder's
+`approve` and `commit` calls.
 
 ---
 
@@ -44,11 +46,13 @@ Conflating these is how a design like this fails.
 main wallet
     │  shield (well ahead of auction)
     ▼
-STRK20 pool ──── private transfer ────► private sub-account
-                                              │
-                                              │ ERC20 transfer_from (uniform collateral)
-                                              ▼
-                                     Sealed auction contract
+STRK20 pool ──── private transfer ────► private sub-account contract
+      │                                       ▲
+      │ pool-driven anonymizer invoke         │ acts only inside this invoke
+      └───────────────────────────────────────┘
+                          │ approve token, then call commit
+                          ▼
+                 Sealed auction contract
                                               │ settle, then per-entry claim
                                               ▼
                                         private sub-account
@@ -57,9 +61,14 @@ STRK20 pool ──── private transfer ────► private sub-account
                                          STRK20 pool
 ```
 
-The auction contract is a plain Cairo contract holding ERC20 balances. It makes no assumption about `privacy_invoke` lifecycle, helper statefulness, or multi-depositor accounting.
+The auction contract is a plain Cairo contract holding ERC20 balances. It makes no
+assumption about helper statefulness or multi-depositor helper accounting. The bid
+transaction does depend on the pool driving `sub_account_anonymizer`, with an empty
+open-note span so collateral remains in the auction contract.
 
-**What this costs.** Less surface area on the anonymizer interface. **What it buys.** Every dependency is confirmed, the day 6 gate becomes trivial, and there is no question outstanding with the protocol team that can sink the project.
+**What this costs.** The anonymizer address and pool-driven call path are critical
+dependencies. **What it buys.** Auction accounting and long-lived custody remain in
+the small contract we control rather than in a multi-user privacy helper.
 
 **Why the collateral transfer leaks nothing.** Every bidder transfers an identical amount, so the visible ERC20 leg is uniform across all bidders and carries zero information about any bid. The address performing it is a sub-account with no public link to a person.
 
@@ -80,7 +89,7 @@ These do not change during the sprint.
 | Amount type | u256 throughout, never felt252 for token values |
 | Token | One token for the whole sprint. STRK. |
 | Privacy layer | Privacy SDK 0.14.3-rc.4, SDK route, sub-accounts only |
-| Custody | Ordinary ERC20 held by the auction contract. No `privacy_invoke`. |
+| Custody | Ordinary ERC20 held by the auction contract; funded through a pool-driven sub-account invocation, not helper custody. |
 | Frontend | Next.js 14 App Router, TypeScript, Tailwind |
 | Chain access | starknet.js |
 | Off-chain store | Supabase Postgres, listing metadata and reveal reminders only |
@@ -228,7 +237,8 @@ Both claim paths use the same authorisation: recompute the Poseidon handle from 
 
 ## 7. STRK20 integration
 
-- SDK-route private sub-account creation via `transfers.build().subaccounts(dappName).invoke(...)`, backed by `sub_account_anonymizer`
+- SDK-route sub-account calls via `transfers.build().subaccounts(dappName).invoke(nonce, { calls }).execute()`, backed by `sub_account_anonymizer`
+- A configured `subAccountAnonymizerAddress`; no canonical Sepolia or mainnet deployment has been found
 - Registration and viewing key setup on first use
 - Shielding to fund, private transfer from main shielded balance to sub-account
 - Channel and per-token subchannel setup

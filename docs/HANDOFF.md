@@ -207,7 +207,13 @@ The "rules about calling a step done" section above was written from this pass. 
 
 ### Step 0
 
-Not started.
+Completed in commit `798ca60`. Privacy SDK tag `PRIVACY-0.14.3-RC.4` exists at
+commit `722d1cf`. The sub-account route exists as
+`subaccounts(dappName).invoke(nonce, { calls }).execute()`, but sub-accounts can act
+only inside a pool-driven anonymizer invocation. No canonical deployed anonymizer
+address was found. `strk20-by-example.org` failed for a second day and is treated
+as unavailable. Full source references and prerequisites are in
+`docs/reference/NOTES.md` question (b).
 
 ### Step 1
 
