@@ -11,7 +11,7 @@ import { AUCTION_ADDRESS } from "../src/lib/config";
 import { derivePayoutAccount } from "../src/lib/payout";
 import { provider } from "../src/lib/provider";
 import { formatStrk, parseStrk, randomFelt, splitU256, toHex } from "../src/lib/secrets";
-import { buildBidActions, buildShieldActions, isSepolia, shieldedStrk } from "../src/lib/wallet";
+import { NotRegistered, buildBidActions, buildShieldActions, isSepolia, shieldedStrk } from "../src/lib/wallet";
 
 type Submitted = { txHash: string; backup: BidBackup };
 
@@ -26,6 +26,7 @@ export default function BidPage() {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [submitted, setSubmitted] = useState<Submitted | null>(null);
+  const [registered, setRegistered] = useState(true);
 
   // Build the discovery store once, so wallets have time to register before the
   // user picks one. eip1193Adapters:[] keeps MetaMask's Snap probing out.
@@ -59,7 +60,13 @@ export default function BidPage() {
       const id = (await walletV6.requestChainId(wallet)) as string;
       setChainId(id);
       if (!isSepolia(id)) setError("Switch the wallet to Sepolia. This auction is a Sepolia deployment.");
-      setShielded(await shieldedStrk(wa));
+      try {
+        setShielded(await shieldedStrk(wa));
+        setRegistered(true);
+      } catch (e) {
+        if (e instanceof NotRegistered) setRegistered(false);
+        else throw e;
+      }
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -223,6 +230,21 @@ export default function BidPage() {
             <Row label="shielded" value={shielded === null ? "unknown" : `${formatStrk(shielded)} STRK`} />
           </dl>
 
+          {!registered && (
+            <div className="rounded border border-amber-900 bg-amber-950/30 p-3 text-sm space-y-2">
+              <p className="font-medium text-amber-200">This account is not registered with the privacy pool</p>
+              <p className="text-amber-100/70">
+                An account has to publish a viewing key before it can hold a shielded balance.
+                Registration is not something this page can do for you: there is no registration
+                action in the Wallet API, and only you can publish your own viewing key.
+              </p>
+              <p className="text-amber-100/70">
+                Open Ready, use its own privacy feature once, for example shielding a small amount
+                there. The wallet registers on first use. Then reconnect here.
+              </p>
+            </div>
+          )}
+
           {auction && (
             <p className="text-sm text-neutral-400">
               Collateral is {formatStrk(auction.collateral)} STRK per bidder, identical for everyone.
@@ -242,14 +264,14 @@ export default function BidPage() {
             </label>
             <button
               onClick={bid}
-              disabled={!!busy}
+              disabled={!!busy || !registered}
               className="rounded bg-neutral-100 px-5 py-2 font-medium text-neutral-900 disabled:opacity-40"
             >
               {busy || "Place bid"}
             </button>
           </div>
 
-          <button onClick={shield} disabled={!!busy} className="text-sm text-neutral-500 underline">
+          <button onClick={shield} disabled={!!busy || !registered} className="text-sm text-neutral-500 underline disabled:opacity-40">
             Shield 2 STRK first
           </button>
 

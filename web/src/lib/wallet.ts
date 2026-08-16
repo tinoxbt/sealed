@@ -37,8 +37,25 @@ export function buildShieldActions(amount: bigint): WALLET_API.STRK20_ACTION[] {
   return [{ type: "deposit", token: TOKEN_ADDRESS, amount: "0x" + amount.toString(16) }];
 }
 
+/// Thrown when the account has no viewing key in the pool yet.
+///
+/// There is no registration action in the Wallet API union, so a dapp cannot
+/// fix this. The wallet registers on first use of its own privacy features.
+export class NotRegistered extends Error {}
+
+function isNotRegistered(e: unknown): boolean {
+  const m = (e as Error)?.message?.toLowerCase() ?? "";
+  return m.includes("not_registered") || m.includes("not registered") || m.includes("viewing key");
+}
+
 export async function shieldedStrk(account: WalletAccountV6): Promise<bigint> {
-  const balances = await account.strk20Balances([TOKEN_ADDRESS]);
+  let balances;
+  try {
+    balances = await account.strk20Balances([TOKEN_ADDRESS]);
+  } catch (e) {
+    if (isNotRegistered(e)) throw new NotRegistered();
+    throw e;
+  }
   const entry = balances?.find(
     (b: { token: string; balance: string }) => BigInt(b.token) === BigInt(TOKEN_ADDRESS),
   );
