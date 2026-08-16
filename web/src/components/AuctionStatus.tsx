@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { AuctionSummary } from "../lib/auction";
+import { AUCTION_ADDRESS, EXPLORER } from "../lib/config";
 import { formatStrk } from "../lib/secrets";
 
 const PHASE_LABEL: Record<AuctionSummary["phase"], string> = {
@@ -68,6 +69,15 @@ export function AuctionStatus({ a }: { a: AuctionSummary }) {
           seller, whatever you bid.
         </p>
       )}
+      <a
+        href={`${EXPLORER}/contract/${AUCTION_ADDRESS}`}
+        target="_blank"
+        rel="noreferrer"
+        className="block font-mono text-xs text-neutral-600 hover:text-neutral-400 break-all"
+      >
+        {AUCTION_ADDRESS}
+      </a>
+
       {a.phase === "Settled" && a.commitments > a.revealed && (
         <p className="text-xs text-neutral-500">
           {a.commitments - a.revealed} of {a.commitments} never revealed and forfeited.

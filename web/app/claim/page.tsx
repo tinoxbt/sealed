@@ -2,7 +2,14 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { claimCall, readEntryStatus, type EntryStatus } from "../../src/lib/auction";
+import {
+  claimCall,
+  readAuction,
+  readEntryStatus,
+  settleCall,
+  type AuctionSummary,
+  type EntryStatus,
+} from "../../src/lib/auction";
 import type { BidBackup } from "../../src/lib/backup";
 import { useWallet } from "../../src/lib/useWallet";
 import { BackupLoader } from "../../src/components/BackupLoader";
@@ -12,6 +19,7 @@ export default function ClaimPage() {
   const w = useWallet();
   const [backup, setBackup] = useState<BidBackup | null>(null);
   const [status, setStatus] = useState<EntryStatus | null>(null);
+  const [auction, setAuction] = useState<AuctionSummary | null>(null);
   const [txHash, setTxHash] = useState("");
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
@@ -20,9 +28,31 @@ export default function ClaimPage() {
     setBackup(b);
     setError("");
     try {
-      setStatus(await readEntryStatus(b.claimHandle));
+      const [s, a] = await Promise.all([readEntryStatus(b.claimHandle), readAuction()]);
+      setStatus(s);
+      setAuction(a);
     } catch (e) {
       setError(`Could not read the entry: ${(e as Error).message}`);
+    }
+  }
+
+  /// Settle is permissionless and moves no money, so a bidder waiting to be
+  /// paid can do it themselves rather than waiting on the seller. Without this
+  /// the flow dead-ends after the reveal deadline.
+  async function settle() {
+    if (!w.account || !backup) return;
+    setError("");
+    setBusy("Settling");
+    try {
+      const res = await w.account.execute([settleCall()]);
+      setTxHash(res.transaction_hash);
+      const [s, a] = await Promise.all([readEntryStatus(backup.claimHandle), readAuction()]);
+      setStatus(s);
+      setAuction(a);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy("");
     }
   }
 
@@ -77,11 +107,31 @@ export default function ClaimPage() {
             </Note>
           )}
 
-          {status === "Revealed" && (
+          {status === "Revealed" && auction?.phase === "Revealing" && (
             <Note tone="neutral">
-              Revealed, but the auction has not settled yet. Come back after the reveal deadline.
-              Anyone can call settle.
+              Revealed, and the reveal window is still open. The auction can be settled once it
+              closes, and then you can claim.
             </Note>
+          )}
+
+          {status === "Revealed" && auction?.phase === "AwaitingSettlement" && (
+            <>
+              <Note tone="neutral">
+                The reveal window has closed and nobody has settled yet. Settling records the
+                winner and the clearing price and moves no money, so anyone can do it, including
+                you. Claiming becomes possible immediately afterwards.
+              </Note>
+              <WalletBar {...w} connect={w.connect} />
+              {w.address && (
+                <button
+                  onClick={settle}
+                  disabled={!!busy}
+                  className="rounded bg-neutral-100 px-5 py-2 font-medium text-neutral-900 disabled:opacity-40"
+                >
+                  {busy || "Settle the auction"}
+                </button>
+              )}
+            </>
           )}
 
           {status === "Forfeited" && (

@@ -25,6 +25,7 @@ export default function BidPage() {
   const [shielded, setShielded] = useState<bigint | null>(null);
   const [auction, setAuction] = useState<AuctionSummary | null>(null);
   const [amount, setAmount] = useState("0.5");
+  const [shieldAmount, setShieldAmount] = useState("2");
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [submitted, setSubmitted] = useState<Submitted | null>(null);
@@ -79,9 +80,9 @@ export default function BidPage() {
   async function shield() {
     if (!account) return;
     setError("");
-    setBusy("Shielding 2 STRK");
+    setBusy(`Shielding ${shieldAmount} STRK`);
     try {
-      await account.strk20InvokeTransaction(buildShieldActions(parseStrk("2")));
+      await account.strk20InvokeTransaction(buildShieldActions(parseStrk(shieldAmount)));
       setShielded(await shieldedStrk(account));
     } catch (e) {
       setError((e as Error).message);
@@ -278,9 +279,23 @@ export default function BidPage() {
             </button>
           </div>
 
-          <button onClick={shield} disabled={!!busy || !registered} className="text-sm text-neutral-500 underline disabled:opacity-40">
-            Shield 2 STRK first
-          </button>
+          <div className="flex items-end gap-2">
+            <label className="space-y-1">
+              <span className="block text-xs text-neutral-500">Shield more STRK</span>
+              <input
+                value={shieldAmount}
+                onChange={(e) => setShieldAmount(e.target.value)}
+                className="w-24 rounded border border-neutral-800 bg-neutral-900 px-2 py-1 text-sm"
+              />
+            </label>
+            <button
+              onClick={shield}
+              disabled={!!busy || !registered}
+              className="rounded border border-neutral-800 px-3 py-1 text-sm text-neutral-400 hover:border-neutral-700 disabled:opacity-40"
+            >
+              Shield
+            </button>
+          </div>
 
           <p className="text-xs text-neutral-500">
             Shield well before you bid. Shielding moments before a bid creates a timing link
