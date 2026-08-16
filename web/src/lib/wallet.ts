@@ -43,6 +43,19 @@ export function buildShieldActions(amount: bigint): WALLET_API.STRK20_ACTION[] {
 /// fix this. The wallet registers on first use of its own privacy features.
 export class NotRegistered extends Error {}
 
+/// The pool requires every transaction to spend at least one matured note,
+/// which is what provides replay protection. A deposit only appends a note; it
+/// does not spend one. So a freshly shielded balance cannot be spent until the
+/// deposit is included and the note is discoverable, roughly ten blocks.
+///
+/// Shielding and bidding seconds apart therefore fails at the pool, before the
+/// auction contract is ever reached. This is the same advice the privacy model
+/// gives for a different reason: shield well ahead.
+export function isNoteNotReady(e: unknown): boolean {
+  const m = (e as Error)?.message?.toUpperCase() ?? "";
+  return m.includes("NO_REPLAY_PROTECTION") || m.includes("NO MATURED NOTE");
+}
+
 function isNotRegistered(e: unknown): boolean {
   const m = (e as Error)?.message?.toLowerCase() ?? "";
   return m.includes("not_registered") || m.includes("not registered") || m.includes("viewing key");

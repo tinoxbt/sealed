@@ -13,7 +13,14 @@ import { AUCTION_ADDRESS } from "../src/lib/config";
 import { derivePayoutAccount } from "../src/lib/payout";
 import { provider } from "../src/lib/provider";
 import { formatStrk, parseStrk, randomFelt, splitU256, toHex } from "../src/lib/secrets";
-import { NotRegistered, buildBidActions, buildShieldActions, isSepolia, shieldedStrk } from "../src/lib/wallet";
+import {
+  NotRegistered,
+  buildBidActions,
+  buildShieldActions,
+  isNoteNotReady,
+  isSepolia,
+  shieldedStrk,
+} from "../src/lib/wallet";
 
 type Submitted = { txHash: string; backup: BidBackup };
 
@@ -160,7 +167,15 @@ export default function BidPage() {
       setSubmitted({ txHash: res.transaction_hash, backup });
       void refresh();
     } catch (e) {
-      setError((e as Error).message);
+      // A rejected bid leaves the secrets in localStorage, which is correct:
+      // they are worthless without an entry, and keeping them costs nothing
+      // while losing them to a retry would be irreversible if the first
+      // attempt had in fact landed.
+      setError(
+        isNoteNotReady(e)
+          ? "Your shielded balance is too new to spend. The pool requires a matured note, which takes roughly ten blocks after shielding. Wait a few minutes and bid again. Shielding well ahead of an auction also avoids the timing link that shielding moments before a bid would create."
+          : (e as Error).message,
+      );
     } finally {
       setBusy("");
     }
