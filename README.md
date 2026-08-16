@@ -97,6 +97,7 @@ contracts/   Cairo 2, Scarb, snforge tests
 web/         Next.js frontend
 scripts/     Declare, deploy, seed a demo auction
 docs/        ARCHITECTURE.md, PRIVACY.md, MECHANISM.md, HELPER_CUSTODY.md
+             POOL_REVEAL.md (proposal, unadopted)
              MAINNET.md, HANDOFF.md
              reference/  Offline copies and research notes
 CLAUDE.md    Working constraints and non-negotiables
