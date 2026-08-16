@@ -81,7 +81,7 @@ Day 2 of 17. Deployed to Sepolia, and the day 3 gate has passed.
 | Day 3 gate: a composed withdraw plus privacy_invoke funds a commitment on Sepolia | **Passed**, `0x3e27d50c...817dc719` |
 | Frontend: bid, reveal, claim, settle and seller proceeds | Done, all four roles |
 | Full lifecycle exercised on Sepolia | Done, `scripts/lifecycle-sepolia.ts`, auction `0x3d838d8d...160ba58c` |
-| Mainnet deployment and a live auction | Not started |
+| Mainnet deployment and a live auction | Not started, prepared in `docs/MAINNET.md` |
 | PRIVACY.md, MECHANISM.md, HELPER_CUSTODY.md | Done |
 | Demo video | Not started |
 
@@ -93,7 +93,8 @@ Mainnet transaction hashes and deployed contract addresses will appear in `strk2
 contracts/   Cairo 2, Scarb, snforge tests
 web/         Next.js frontend
 scripts/     Declare, deploy, seed a demo auction
-docs/        ARCHITECTURE.md, PRIVACY.md, MECHANISM.md, HELPER_CUSTODY.md, HANDOFF.md
+docs/        ARCHITECTURE.md, PRIVACY.md, MECHANISM.md, HELPER_CUSTODY.md
+             MAINNET.md, HANDOFF.md
              reference/  Offline copies and research notes
 CLAUDE.md    Working constraints and non-negotiables
 HACKATHON.md Sprint rules, judging weights, submission requirements
