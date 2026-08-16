@@ -2,6 +2,7 @@
 
 import { createStore, type Store } from "@starknet-io/get-starknet-discovery";
 import type { WalletWithStarknetFeatures } from "@starknet-io/get-starknet-wallet-standard/features";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { WalletAccountV6, validateAndParseAddress, walletV6 } from "starknet";
 import { readAuction, type AuctionState } from "../src/lib/auction";
@@ -197,6 +198,14 @@ export default function BidPage() {
           Sealed-bid, second-price. Your bid is hidden until you reveal it, and every bidder
           escrows the same collateral so the funding leg says nothing about the bid.
         </p>
+        <nav className="flex gap-4 pt-2 text-sm">
+          <Link href="/reveal" className="text-neutral-400 underline hover:text-neutral-200">
+            Reveal a bid
+          </Link>
+          <Link href="/claim" className="text-neutral-400 underline hover:text-neutral-200">
+            Claim
+          </Link>
+        </nav>
       </header>
 
       {error && <p className="rounded border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">{error}</p>}

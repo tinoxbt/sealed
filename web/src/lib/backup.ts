@@ -47,3 +47,16 @@ export function forceDownload(b: BidBackup) {
   // Revoke late: some browsers abort an in-flight download otherwise.
   setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
+
+/// Read a backup from the file the bid flow downloaded.
+///
+/// localStorage is the convenient path and the file is the durable one. A
+/// bidder who bid on another machine, or cleared site data, has only the file,
+/// so every page that needs secrets accepts both.
+export function parseBackup(text: string): BidBackup {
+  const b = JSON.parse(text) as BidBackup;
+  for (const f of ["bidSalt", "claimSecret", "claimHandle", "payoutAddress"] as const) {
+    if (!b[f]) throw new Error(`Backup is missing ${f}.`);
+  }
+  return b;
+}
