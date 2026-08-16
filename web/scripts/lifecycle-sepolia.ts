@@ -20,14 +20,16 @@
 /// The pool is not involved: this tests the auction, not the privacy leg, and
 /// the privacy leg already passed its own gate.
 import { readFileSync } from "node:fs";
-import { Account, Contract, RpcProvider, hash } from "starknet";
+import { Account, RpcProvider, hash } from "starknet";
 import { bidCommitment, claimHandle } from "../src/commitment.js";
 
 const RPC = process.env.SEALED_RPC ?? "https://api.cartridge.gg/x/starknet/sepolia";
-const CLASS_HASH = "0x630787ce3656d5a6d7d77f03ad708d696157936569edf0161b103c5f146c13f";
+/// Must track the deployed class. A stale hash here silently exercises an
+/// older contract and reports green against code nobody is shipping.
+const CLASS_HASH = process.env.SEALED_CLASS_HASH ??
+  "0x41d1ca82df89aec29334c41c5c37c724a91b231fec971fcc0f457de2c6809b1";
 const TOKEN = "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d";
 const POOL = "0x0254a6b2997ef52e9f830ce1f543f6b29768295e8d17e2267d672c552cfe0d91";
-const UDC = "0x041a78e741e5af2fec34b695679bc6891742439f7afb8484ecd7766661ad02bf";
 
 const STRK = (n: string) => BigInt(Math.round(parseFloat(n) * 1e6)) * 10n ** 12n;
 const fmt = (v: bigint) => (Number(v / 10n ** 12n) / 1e6).toFixed(4);
