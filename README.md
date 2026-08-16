@@ -67,7 +67,7 @@ STRK20 pool
 
 ## Build status
 
-Day 2 of 17. Nothing is deployed yet.
+Day 2 of 17. Deployed to Sepolia, and the day 3 gate has passed.
 
 | Piece | Status |
 | --- | --- |
@@ -77,9 +77,10 @@ Day 2 of 17. Nothing is deployed yet.
 | Poseidon parity between Cairo and starknet.js | Done, shared fixture asserted on both sides |
 | Auction contract: commit, privacy_invoke, reveal, settle, claim | Done, 369 lines of code plus 156 of comment |
 | snforge tests covering all twelve invariants | Done, 31 passing, 2 fuzzed |
-| Auction deployed to Sepolia | Done, `0x018c2c1b...afda1325` |
-| Day 3 gate: a composed withdraw plus privacy_invoke funds a commitment on Sepolia | Contract live, bid flow not built |
-| Frontend, wallet wiring, secret backup | Not started |
+| Auction deployed to Sepolia | Done, `0x05a58d32...a088f7b8` |
+| Day 3 gate: a composed withdraw plus privacy_invoke funds a commitment on Sepolia | **Passed**, `0x3e27d50c...817dc719` |
+| Frontend: bid, reveal and claim, with forced secret backup | Done, unstyled but working |
+| Reveal, settle and claim exercised on chain | Not yet, the live auction closes 23 August |
 | Mainnet deployment and a live auction | Not started |
 | PRIVACY.md, MECHANISM.md, demo video | Not started, `HELPER_CUSTODY.md` done |
 

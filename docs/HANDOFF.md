@@ -366,3 +366,38 @@ is established. A current-Cairo hello-world contract and smoke test now exist in
 `snforge test` collected and passed `hello_world_smoke_test`: one passed, zero
 failed. Step 1's executable toolchain gate is therefore working. The OpenZeppelin
 version remains to be resolved before Step 1 can be logged as fully complete.
+
+### Step 3, the gate: passed 15 August 2026
+
+A bid placed from the frontend through Xverse on Sepolia. One STRK20 transaction
+carrying two actions: `withdraw` one STRK to the auction, then `invoke` on the
+auction, which the pool dispatches to `privacy_invoke`.
+
+Transaction `0x3e27d50c529a7731d128e2f7189ff7d7000e7d919f4d34e36890a32817dc719`,
+block 13532181, auction `0x05a58d32d426ddbf37e376c5668991168cb2e0d19cc017d5158d4836a088f7b8`.
+
+Verified on chain after the fact:
+
+- `commitment_count` 1, `escrowed` 1 STRK, and the auction's actual STRK balance
+  1 STRK. Invariant 1 holding on a real network, not in a test.
+- `get_entry_status(claim_handle)` returns `Committed`.
+- The `Committed` event carries the claim handle and nothing else. No bidder
+  address appears anywhere in the contract's state or events.
+- The transaction's sender is `0x23ce09a4...50764e2`, whose nonce is over 21000.
+  That is a shared relayer, not the bidder's wallet, so the outermost public
+  artifact of the bid carries no information about who placed it.
+
+The backup file downloaded as designed, before the confirmation screen.
+
+Two findings worth carrying forward:
+
+- **Xverse shields on Sepolia. Ready did not.** Ready failed with "failed to
+  authenticate with the privacy backend", which is the FPI screening service.
+  The Sepolia pool does have a screener public key set, so screening is enforced
+  there, and Xverse obtaining an attestation proves the service does serve
+  testnet. The problem was one wallet's backend, not the network.
+- **Xverse exposes the dapp-facing Privacy Wallet API on Sepolia**, contrary to
+  the ecosystem list describing that support as in progress. `strk20Balances`
+  and `strk20InvokeTransaction` both work.
+
+Option D is no longer a proposal. It is a working funding path on a live network.
