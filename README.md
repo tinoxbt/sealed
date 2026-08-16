@@ -80,7 +80,7 @@ Day 2 of 17. Deployed to Sepolia, and the day 3 gate has passed.
 | Auction deployed to Sepolia | Done, `0x05a58d32...a088f7b8` |
 | Day 3 gate: a composed withdraw plus privacy_invoke funds a commitment on Sepolia | **Passed**, `0x3e27d50c...817dc719` |
 | Frontend: bid, reveal and claim, with forced secret backup | Done, unstyled but working |
-| Reveal, settle and claim exercised on chain | Not yet, the live auction closes 23 August |
+| Full lifecycle exercised on Sepolia | Done, `scripts/lifecycle-sepolia.ts`, auction `0x3d838d8d...160ba58c` |
 | Mainnet deployment and a live auction | Not started |
 | PRIVACY.md, MECHANISM.md, demo video | Not started, `HELPER_CUSTODY.md` done |
 

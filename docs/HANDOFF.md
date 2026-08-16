@@ -401,3 +401,32 @@ Two findings worth carrying forward:
   and `strk20InvokeTransaction` both work.
 
 Option D is no longer a proposal. It is a working funding path on a live network.
+
+### Full lifecycle on Sepolia: passed 16 August 2026
+
+`web/scripts/lifecycle-sepolia.ts` deploys a short-window auction and drives it
+end to end, asserting as it goes. Auction `0x3d838d8df5527ce1ce2bf8244b459cf82431fb1fe3696cb5431af84160ba58c`.
+
+Three bidders. A bids 0.8 and reveals, B bids 0.5 and reveals, C bids 0.9 and
+stays silent. Every assertion passed:
+
+- 3 commitments, `escrowed` 3 STRK, contract balance 3 STRK
+- A wins, and the clearing price is B's 0.5 rather than A's own 0.8
+- statuses resolve Won, Lost, Forfeited
+- a second `settle` leaves the clearing price unchanged
+- A receives 0.5, B receives 1.0, the seller receives exactly 1.5
+- a second `claim_proceeds` reverts
+- the contract drains to 0, while `escrowed` still records 3
+
+C is the point of the exercise. An unrevealed bid that would have won is worth
+nothing, and its collateral goes to the seller. Forfeiture is what makes silence
+expensive.
+
+**A test bug worth recording.** The first two runs failed on the seller
+assertion, reporting 1.4069 against an expected 1.5. The contract was correct
+both times: the seller payout address was the same account that pays the gas,
+and fees are denominated in STRK, so the measurement subtracted its own gas
+bill. Proof it was never a contract fault is that the auction balance was
+already exactly 0, meaning 3 STRK in and 3 STRK out. Fixed by paying proceeds to
+an address that never sends transactions. Loosening the tolerance would have
+hidden the real lesson: never measure a payout on the account paying the fees.
