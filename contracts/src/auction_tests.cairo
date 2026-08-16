@@ -591,6 +591,23 @@ mod tests {
         assert(token.balance_of(auction_address) == COLLATERAL * 3, 'balance matches');
     }
 
+    // The frontend cannot show a phase or a countdown without these, and a
+    // wrong reserve on screen would let a bidder submit a bid the contract
+    // rejects.
+    #[test]
+    fn config_getters_match_construction() {
+        let b1 = addr('b1');
+        let (auction, _, _) = setup(array![b1].span());
+
+        assert(auction.get_reserve_price() == RESERVE, 'reserve');
+        assert(auction.get_collateral() == COLLATERAL, 'collateral');
+
+        let (close, deadline) = auction.get_timing();
+        assert(close == CLOSE, 'close time');
+        assert(deadline == DEADLINE, 'reveal deadline');
+        assert(close < deadline, 'close before deadline');
+    }
+
     // Invariant 5, fuzzed. The running top-two update has to be right for
     // reveals arriving in any order, including ties and duplicates.
     #[test]

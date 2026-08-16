@@ -126,6 +126,11 @@ pub trait ISealedAuction<TContractState> {
     fn get_revealed_count(self: @TContractState) -> u32;
     fn get_collateral(self: @TContractState) -> u256;
     fn get_escrowed(self: @TContractState) -> u256;
+    fn get_reserve_price(self: @TContractState) -> u256;
+    /// (close_time, reveal_deadline). Returned together because a caller
+    /// deciding which phase the auction is in needs both, and two round trips
+    /// can straddle a phase change and produce a state that never existed.
+    fn get_timing(self: @TContractState) -> (u64, u64);
 }
 
 #[starknet::contract]
@@ -521,6 +526,14 @@ pub mod SealedAuction {
 
         fn get_escrowed(self: @ContractState) -> u256 {
             self.escrowed.read()
+        }
+
+        fn get_reserve_price(self: @ContractState) -> u256 {
+            self.reserve_price.read()
+        }
+
+        fn get_timing(self: @ContractState) -> (u64, u64) {
+            (self.close_time.read(), self.reveal_deadline.read())
         }
     }
 

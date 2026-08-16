@@ -5,7 +5,8 @@ import type { WalletWithStarknetFeatures } from "@starknet-io/get-starknet-walle
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { WalletAccountV6, validateAndParseAddress, walletV6 } from "starknet";
-import { readAuction, type AuctionState } from "../src/lib/auction";
+import { readAuction, type AuctionSummary } from "../src/lib/auction";
+import { AuctionStatus } from "../src/components/AuctionStatus";
 import { forceDownload, persist, type BidBackup } from "../src/lib/backup";
 import { bidCommitment, claimHandle } from "../src/commitment";
 import { AUCTION_ADDRESS } from "../src/lib/config";
@@ -22,7 +23,7 @@ export default function BidPage() {
   const [address, setAddress] = useState("");
   const [chainId, setChainId] = useState("");
   const [shielded, setShielded] = useState<bigint | null>(null);
-  const [auction, setAuction] = useState<AuctionState | null>(null);
+  const [auction, setAuction] = useState<AuctionSummary | null>(null);
   const [amount, setAmount] = useState("0.5");
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
@@ -205,6 +206,9 @@ export default function BidPage() {
           <Link href="/claim" className="text-neutral-400 underline hover:text-neutral-200">
             Claim
           </Link>
+          <Link href="/seller" className="text-neutral-400 underline hover:text-neutral-200">
+            Seller
+          </Link>
         </nav>
       </header>
 
@@ -254,13 +258,7 @@ export default function BidPage() {
             </div>
           )}
 
-          {auction && (
-            <p className="text-sm text-neutral-400">
-              Collateral is {formatStrk(auction.collateral)} STRK per bidder, identical for everyone.
-              {" "}
-              {auction.commitments} commitment{auction.commitments === 1 ? "" : "s"} so far.
-            </p>
-          )}
+          {auction && <AuctionStatus a={auction} />}
 
           <div className="flex items-end gap-3">
             <label className="flex-1 space-y-1">

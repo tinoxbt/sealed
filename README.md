@@ -77,9 +77,9 @@ Day 2 of 17. Deployed to Sepolia, and the day 3 gate has passed.
 | Poseidon parity between Cairo and starknet.js | Done, shared fixture asserted on both sides |
 | Auction contract: commit, privacy_invoke, reveal, settle, claim | Done, 369 lines of code plus 156 of comment |
 | snforge tests covering all twelve invariants | Done, 31 passing, 2 fuzzed |
-| Auction deployed to Sepolia | Done, `0x05a58d32...a088f7b8` |
+| Auction deployed to Sepolia | Done, `0x04a7999f...6b319138` |
 | Day 3 gate: a composed withdraw plus privacy_invoke funds a commitment on Sepolia | **Passed**, `0x3e27d50c...817dc719` |
-| Frontend: bid, reveal and claim, with forced secret backup | Done, unstyled but working |
+| Frontend: bid, reveal, claim, settle and seller proceeds | Done, all four roles |
 | Full lifecycle exercised on Sepolia | Done, `scripts/lifecycle-sepolia.ts`, auction `0x3d838d8d...160ba58c` |
 | Mainnet deployment and a live auction | Not started |
 | PRIVACY.md, MECHANISM.md, HELPER_CUSTODY.md | Done |
