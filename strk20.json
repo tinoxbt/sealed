@@ -1,12 +1,6 @@
 {
-  "transactions": [
-    "0x02c33b96ebe0f8e1e8e2ea523659162060a6bed1f162be522e29da3e2e5f3e79",
-    "0x3e27d50c529a7731d128e2f7189ff7d7000e7d919f4d34e36890a32817dc719",
-    "0x02549f8fca457736cc006de2efdce5f556eaab641b4700712237bbe954462906"
-  ],
-  "contracts": [
-    "0x04a7999ff7842ea702a4313819197f20fbafe18ec617b88f9387335d6b319138"
-  ],
+  "transactions": [],
+  "contracts": [],
   "demo_video": "",
   "demo_url": ""
 }

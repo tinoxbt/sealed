@@ -85,7 +85,10 @@ Day 2 of 17. Deployed to Sepolia, and the day 3 gate has passed.
 | PRIVACY.md, MECHANISM.md, HELPER_CUSTODY.md | Done |
 | Demo video | Not started |
 
-Mainnet transaction hashes and deployed contract addresses will appear in `strk20.json` and in this section as they land.
+Everything above is Sepolia. `strk20.json` is deliberately empty: the sprint scores at least three
+**mainnet** transactions **that touched the pool**, and a testnet deploy is neither. Sepolia addresses
+and hashes are recorded in this section and in `docs/HANDOFF.md` instead, where they are labelled as
+what they are.
 
 ## Repository
 
