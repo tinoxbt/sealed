@@ -69,10 +69,11 @@ main wallet -> shield -> pool
 ## Frontend rules
 
 - Both secrets generated as 31 random bytes from `crypto.getRandomValues`, client-side, never transmitted.
-- The payout sub-account must be generated during the bid flow, before committing, because its address is hashed into `claim_handle`. Back it up with the secrets.
+- The payout account must be derived during the bid flow, before committing, because its address is hashed into `claim_handle`. It is a counterfactual OpenZeppelin account: the address is computed now and deployed only when its owner moves the funds on. Back up the private key, the salt and the class hash with the secrets, because losing any of them makes the address undeployable and the payout unreachable.
 - Persist to localStorage keyed by auction id, and force a JSON backup download immediately after commit, before the confirmation screen. Not skippable. Losing `claim_secret` means funds are unrecoverable.
 - The contract is the only source of truth for auction state. Supabase is metadata and reminders. If Supabase is down, the auction still settles.
-- Warn users to fund shielded balances and sub-accounts well ahead of an auction. Funding immediately before committing creates a timing link.
+- Warn users to shield well ahead of an auction. Shielding immediately before committing creates a timing link the pool cannot hide.
+- Warn at the moment of revealing that the sending address is public and will be linked to the bid amount. Reveal is permissionless, so it can come from any account or be relayed. This is the largest practical leak in the design.
 
 ## Commits
 
