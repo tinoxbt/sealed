@@ -41,3 +41,9 @@ dist/
 # Next.js
 .next/
 next-env.d.ts
+
+# Bid backups. These hold claim_secret and a payout private key in plaintext.
+# Committing one hands anyone the ability to move that bidder's collateral.
+# The bid page downloads them to wherever the browser puts downloads, which
+# can be the repository root.
+sealed-bid-*.json
