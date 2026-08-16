@@ -21,7 +21,7 @@ Second-price is not decoration either. Under a sealed-bid second-price rule, bid
 
 ## Privacy model
 
-Stated plainly, including the parts that leak. The full version lives in `docs/PRIVACY.md`.
+Stated plainly, including the parts that leak. The full version, including the third parties in the path, lives in [`docs/PRIVACY.md`](docs/PRIVACY.md).
 
 **Hidden:** which real person is behind any bidder, and every bid amount until that bidder reveals it.
 
@@ -82,7 +82,8 @@ Day 2 of 17. Deployed to Sepolia, and the day 3 gate has passed.
 | Frontend: bid, reveal and claim, with forced secret backup | Done, unstyled but working |
 | Full lifecycle exercised on Sepolia | Done, `scripts/lifecycle-sepolia.ts`, auction `0x3d838d8d...160ba58c` |
 | Mainnet deployment and a live auction | Not started |
-| PRIVACY.md, MECHANISM.md, demo video | Not started, `HELPER_CUSTODY.md` done |
+| PRIVACY.md, MECHANISM.md, HELPER_CUSTODY.md | Done |
+| Demo video | Not started |
 
 Mainnet transaction hashes and deployed contract addresses will appear in `strk20.json` and in this section as they land.
 
@@ -92,7 +93,7 @@ Mainnet transaction hashes and deployed contract addresses will appear in `strk2
 contracts/   Cairo 2, Scarb, snforge tests
 web/         Next.js frontend
 scripts/     Declare, deploy, seed a demo auction
-docs/        ARCHITECTURE.md, and PRIVACY.md, MECHANISM.md, HELPER_CUSTODY.md as they are written
+docs/        ARCHITECTURE.md, PRIVACY.md, MECHANISM.md, HELPER_CUSTODY.md, HANDOFF.md
              reference/  Offline copies and research notes
 CLAUDE.md    Working constraints and non-negotiables
 HACKATHON.md Sprint rules, judging weights, submission requirements
