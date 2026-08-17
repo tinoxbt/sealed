@@ -64,17 +64,54 @@ The plain `commit` and `reveal` entrypoints stay. They are the fallback if the p
 
 ---
 
-## 3. The assumption that has not been verified
+## 3. The assumption, now supported by source analysis
 
-**That the pool accepts an `invoke` action carrying no value.**
+**Claim: the pool accepts an `invoke` action carrying no value.**
 
-Every composed example seen so far moves value: the starter kit's echo flow withdraws, transfers an open note, then invokes. The reference escrow helper receives on deposit and returns a note on claim. A pure call with zero value transfer is plausible, since the pool asserts only that token balances net to zero after all actions and zero trivially satisfies that, but it has not been demonstrated.
+Read against `packages/privacy/src/privacy.cairo` at tag `PRIVACY-0.14.3-RC.4`:
 
-**And that a self-transfer provides replay protection.** The pool requires at least one action compiling to `WriteOnce`, which is what spending a note produces. A transfer spends notes to create new ones, so it should qualify, while a deposit only appends and does not. Verified in `privacy.cairo` at the level of which action sets the flag, not by executing this specific composition.
+`invoke_external` takes only a contract address and calldata, and produces a
+single `ServerAction::Invoke`:
 
-Both are cheap to test on Sepolia against the existing contract: compose a transfer plus an invoke against any deployed `privacy_invoke` and see whether the pool accepts it. **Do that before writing any Cairo.** If a value-free invoke is rejected, this proposal is dead in its current form and the fallback in section 6 is what remains.
+```cairo
+fn invoke_external(self: @ContractState, input: InvokeExternalInput) -> Array<ServerAction> {
+    input.assert_valid();
+    let InvokeExternalInput { contract_address, calldata } = input;
+    array![ServerAction::Invoke(InvokeInput { contract_address, calldata })]
+}
+```
 
----
+It touches no token balances and creates no obligation to move value. The final
+`token_balances.squash().assert_valid()` requires balances to net to zero, and
+an invoke that moves nothing contributes nothing to net. So a value-free invoke
+is structurally supported rather than merely plausible.
+
+**Claim: a self-transfer provides replay protection.**
+
+`assert(has_replay_protection, errors::NO_REPLAY_PROTECTION)` is satisfied by at
+least one `ServerAction::WriteOnce`, and in `_client_apply_actions` only
+`WriteOnce` sets the flag. `Invoke` explicitly does not:
+
+```cairo
+ServerAction::Invoke(_) => {},
+```
+
+`WriteOnce` comes from spending a note, via `use_note`. A transfer spends notes;
+a deposit only appends. So a composition of transfer plus invoke satisfies it and
+a composition of invoke alone does not.
+
+**Claim: returning an empty span is accepted.**
+
+Already proven in production. Sealed's commit path returns an empty
+`Span<OpenNoteDeposit>` and has executed successfully on Sepolia.
+
+### What is still unproven
+
+None of the above is an executed transaction. Source analysis says the
+composition is well formed; it does not prove the wallet will assemble it, that
+the proving service will accept it, or that no additional validation sits
+between. **Submit one before writing any Cairo.** The test is a transfer plus an
+invoke against the deployed auction, and it costs one Sepolia transaction.
 
 ## 4. What this does not fix
 
