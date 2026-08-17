@@ -1,0 +1,60 @@
+# Build the app and publish it to GitHub Pages.
+#
+# The app is a static export: every page is a client component driven by the
+# wallet and the chain, so there is no server to run and nothing to keep alive.
+# The demo URL the sprint requires therefore cannot break because a backend
+# fell over.
+name: pages
+
+on:
+  push:
+    branches: [main]
+    paths: ["web/**", ".github/workflows/pages.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never cancel a deploy midway, but do not queue up redundant ones either.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      # The parity fixture is the contract between the Cairo hashing and the
+      # browser hashing. If it ever drifts, a bid would commit to a hash the
+      # contract cannot verify, so the deploy stops here rather than shipping.
+      - run: npm run vectors
+      - run: npm run payout
+      - run: npm run build
+        env:
+          # Project sites live under /<repo>, not at the domain root.
+          NEXT_PUBLIC_BASE_PATH: /sealed
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
