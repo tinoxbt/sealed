@@ -8,6 +8,16 @@ export const AUCTION_ADDRESS =
   process.env.NEXT_PUBLIC_AUCTION_ADDRESS ??
   "0x0575e771aeeb47e81f094360e18f61ca5190e77043783ac0d28f9e95c2b8412b";
 
+/// The declared auction class. A seller deploys an instance of it from their
+/// own wallet through the Universal Deployer, so listing an auction needs no
+/// privileged party and no backend.
+///
+/// This must track what is actually declared on the network. A stale value
+/// deploys an older contract that looks identical from the outside.
+export const AUCTION_CLASS_HASH =
+  process.env.NEXT_PUBLIC_AUCTION_CLASS_HASH ??
+  "0x68d3a5ebe037914e8368fd367adbd26849daa80342fa5d2d85827cc538bcc66";
+
 /// STRK. Same address on Sepolia and mainnet.
 export const TOKEN_ADDRESS =
   "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d";

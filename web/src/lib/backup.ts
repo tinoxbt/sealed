@@ -60,3 +60,25 @@ export function parseBackup(text: string): BidBackup {
   }
   return b;
 }
+
+/// The seller's backup, pushed the moment the auction exists.
+///
+/// Same rule as the bid flow and for the same reason: the seller secret exists
+/// only in this file and in localStorage, and `claim_proceeds` recomputes
+/// poseidon(seller_secret, payout_address). Lose either and the clearing price
+/// and every forfeited collateral stay in the contract forever.
+export function forceDownloadSeller(b: {
+  auction: string;
+  [k: string]: unknown;
+}) {
+  localStorage.setItem(`sealed:seller:${b.auction}`, JSON.stringify(b));
+  const blob = new Blob([JSON.stringify(b, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `sealed-seller-${b.auction.slice(0, 10)}-${Date.now()}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30_000);
+}

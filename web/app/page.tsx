@@ -225,6 +225,9 @@ export default function BidPage() {
           <Link href="/seller" className="text-neutral-400 underline hover:text-neutral-200">
             Seller
           </Link>
+          <Link href="/create" className="text-neutral-400 underline hover:text-neutral-200">
+            List an auction
+          </Link>
         </nav>
       </header>
 
