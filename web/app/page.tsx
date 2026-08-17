@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { WalletAccountV6, validateAndParseAddress, walletV6 } from "starknet";
 import { readAuction, type AuctionSummary } from "../src/lib/auction";
+import { AuctionList } from "../src/components/AuctionList";
 import { AuctionStatus } from "../src/components/AuctionStatus";
 import { forceDownload, persist, type BidBackup } from "../src/lib/backup";
 import { bidCommitment, claimHandle } from "../src/commitment";
@@ -230,6 +231,8 @@ export default function BidPage() {
           </Link>
         </nav>
       </header>
+
+      <AuctionList />
 
       {error && <p className="rounded border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">{error}</p>}
 

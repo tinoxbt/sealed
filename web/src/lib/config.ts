@@ -4,9 +4,31 @@
 /// Overridable so a short-window auction can be exercised end to end without
 /// editing source. Editing a constant to test, then forgetting to change it
 /// back, is how a testnet address reaches production.
-export const AUCTION_ADDRESS =
-  process.env.NEXT_PUBLIC_AUCTION_ADDRESS ??
-  "0x0575e771aeeb47e81f094360e18f61ca5190e77043783ac0d28f9e95c2b8412b";
+/// The auction this page is acting on.
+///
+/// Resolved once, when the module loads in the browser, from the `a` query
+/// parameter, then whatever was last chosen, then the configured default.
+/// Every page reads this rather than taking an address parameter, which keeps
+/// ten call sites unchanged.
+///
+/// The consequence is that switching auctions needs a real page load, not a
+/// client-side route change, because this value is captured at module init.
+/// Auction links are therefore plain anchors, not next/link.
+function resolveAuction(): string {
+  const fallback = process.env.NEXT_PUBLIC_AUCTION_ADDRESS ?? "0x01a691c524299a7cdcde1e49680564fa35a8ac64fdf37c7e71f261e88eb03f62";
+  if (typeof window === "undefined") return fallback;
+
+  const fromUrl = new URLSearchParams(window.location.search).get("a");
+  if (fromUrl && /^0x[0-9a-fA-F]{1,64}$/.test(fromUrl)) {
+    window.localStorage.setItem("sealed:active", fromUrl);
+    return fromUrl;
+  }
+  const saved = window.localStorage.getItem("sealed:active");
+  if (saved && /^0x[0-9a-fA-F]{1,64}$/.test(saved)) return saved;
+  return fallback;
+}
+
+export const AUCTION_ADDRESS = resolveAuction();
 
 /// The declared auction class. A seller deploys an instance of it from their
 /// own wallet through the Universal Deployer, so listing an auction needs no
@@ -16,7 +38,7 @@ export const AUCTION_ADDRESS =
 /// deploys an older contract that looks identical from the outside.
 export const AUCTION_CLASS_HASH =
   process.env.NEXT_PUBLIC_AUCTION_CLASS_HASH ??
-  "0x68d3a5ebe037914e8368fd367adbd26849daa80342fa5d2d85827cc538bcc66";
+  "0x58f6401bbd486e949d1e42a99a04841d74190416cfe3336b3c1ceb808eda268";
 
 /// STRK. Same address on Sepolia and mainnet.
 export const TOKEN_ADDRESS =
