@@ -87,7 +87,7 @@ Day 4 of 17. Everything below is Sepolia. Mainnet has not been touched.
 | Frontend: bid, reveal, claim, settle, seller proceeds, listing | Done |
 | Seller can list an auction from the browser | Done, `/create` |
 | Mainnet deployment and a live auction | Not started, prepared in `docs/MAINNET.md` |
-| Public demo URL | Not started, workflow ready in `.github/workflows/web.yml` |
+| Public demo URL | Live, https://tinoxbt.github.io/sealed/ |
 | Demo video | Not started |
 
 Current Sepolia deployment: class `0x58f6401b...808eda268`, auction
