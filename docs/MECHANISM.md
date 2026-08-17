@@ -109,3 +109,59 @@ They are independent, generated separately, and the contract never accepts one w
 | Two independent secrets | The reveal phase becoming a race to drain losers |
 
 Each row is a specific failure. Remove any one and the corresponding attack becomes available, which is why `CLAUDE.md` marks them as scope decisions rather than defaults.
+
+## Setting the collateral, and what it is really doing
+
+The collateral is one number doing three jobs at once, and they pull against
+each other.
+
+1. **It caps the bid.** A reveal is only valid when `reserve <= amount <=
+   collateral`, so the collateral is the highest bid the auction can accept.
+2. **It prices silence.** A bidder who never reveals forfeits it. That is what
+   stops the reveal from being a free option taken only when convenient.
+3. **It sets the entry barrier**, and therefore how many people bid, and
+   therefore the size of the anonymity set the privacy actually rests on.
+
+Raise it and silence becomes expensive and high bids become possible, but fewer
+people can afford to enter and the crowd they hide in shrinks. Lower it and more
+people bid, but withholding a reveal gets cheap and the ceiling on bids drops.
+
+The practical rule: **set the collateral a little above the highest bid you
+think anyone will make.** High enough that forfeiting hurts, low enough not to
+turn bidders away.
+
+### Privacy has a price here, and it is the collateral
+
+A consequence worth stating plainly, because it is unusual. A bidder who would
+rather not disclose their number can simply not reveal. They lose the collateral
+and the bid stays hidden permanently, since the salt is 31 random bytes and the
+commitment is never opened.
+
+So the collateral is the posted price of permanent secrecy, identical for
+everyone, and chosen by the seller. A bidder for whom a revealed valuation would
+be costly in future negotiations may find that price cheap.
+
+This is the same mechanism as the griefing weakness, seen from the other side.
+Forfeiture prices the option to withhold; pricing is not removing. The design
+cannot have the elegant reading without the exploitable one, and both are stated
+here rather than only the flattering one.
+
+Note also that silence forfeits the item as well as the collateral. A bidder who
+would have won pays twice for their privacy.
+
+## Why the reveal window has a floor
+
+The seller receives every forfeited collateral, and the seller also chooses the
+reveal deadline. Those two facts together are an attack: set the deadline one
+second after close, nobody reveals in time, every entry forfeits, and the seller
+takes the entire pot without selling anything.
+
+The constructor therefore refuses any auction whose reveal window is shorter than
+ten minutes. That stops the absurd case. It is not a substitute for the bidder
+checking the window before committing, which is why the interface displays it,
+and a real auction should allow hours or days rather than the floor.
+
+A different design would redistribute forfeited collateral to the bidders who did
+reveal, rewarding disclosure instead of paying the party who benefits from
+confusion. That is a change to the mechanism rather than a fix to a bug, and it
+is recorded here as a considered alternative rather than adopted mid-sprint.

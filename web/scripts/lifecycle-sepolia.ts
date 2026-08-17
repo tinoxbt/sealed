@@ -40,7 +40,9 @@ const hex = (v: bigint) => "0x" + v.toString(16);
 const COLLATERAL = STRK("1");
 const RESERVE = STRK("0.1");
 const OPEN_FOR = Number(process.env.SEALED_OPEN_FOR ?? 180);
-const REVEAL_FOR = Number(process.env.SEALED_REVEAL_FOR ?? 240);
+// The contract enforces a 600s floor on the reveal window, so a seller
+// cannot set one nobody can meet. Test runs sit just above it.
+const REVEAL_FOR = Number(process.env.SEALED_REVEAL_FOR ?? 660);
 
 function rand(): bigint {
   const b = new Uint8Array(31);
