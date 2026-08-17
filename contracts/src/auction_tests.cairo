@@ -16,7 +16,10 @@ mod tests {
         AuctionState, EntryStatus, ISealedAuctionDispatcher, ISealedAuctionDispatcherTrait,
         PoolOperation,
     };
-    use super::super::mock_erc20::{IMockERC20Dispatcher, IMockERC20DispatcherTrait};
+    use super::super::mock_erc20::{
+        IMockERC20Dispatcher, IMockERC20DispatcherTrait, IReentrantTokenDispatcher,
+        IReentrantTokenDispatcherTrait,
+    };
 
     const CLOSE: u64 = 1000;
     const DEADLINE: u64 = 2000;
@@ -812,6 +815,44 @@ mod tests {
 
         start_cheat_caller_address(address, POOL());
         auction.privacy_invoke(PoolOperation::Commit, 0, 'handle', 0, 0);
+    }
+
+    // Found by an independent review. take_collateral reads balance_of, which
+    // looks like a read and is an external call: a view function may still call
+    // another contract, and that call may mutate. A hostile token can reenter
+    // cancel in that window, and before the entry was recorded the auction
+    // still had zero commitments, so the cancel succeeded. The outer call then
+    // recorded the entry anyway, leaving a Cancelled auction holding collateral
+    // that could never be settled or claimed.
+    //
+    // Recording the entry first closes it: commitment_count is already non-zero
+    // when balance_of runs, so the reentrant cancel is refused and the whole
+    // transaction reverts.
+    #[test]
+    #[should_panic(expected: 'cannot cancel now')]
+    fn hostile_token_cannot_cancel_mid_commit() {
+        let token_class = declare("ReentrantToken").unwrap().contract_class();
+        let (token_address, _) = token_class.deploy(@array![]).unwrap();
+
+        let mut calldata: Array<felt252> = array![];
+        handle(SELLER_SECRET, addr('seller_payout')).serialize(ref calldata);
+        token_address.serialize(ref calldata);
+        POOL().serialize(ref calldata);
+        RESERVE.serialize(ref calldata);
+        COLLATERAL.serialize(ref calldata);
+        CLOSE.serialize(ref calldata);
+        DEADLINE.serialize(ref calldata);
+
+        let auction_class = declare("SealedAuction").unwrap().contract_class();
+        let (auction_address, _) = auction_class.deploy(@calldata).unwrap();
+        let auction = ISealedAuctionDispatcher { contract_address: auction_address };
+
+        IReentrantTokenDispatcher { contract_address: token_address }
+            .arm(auction_address, SELLER_SECRET, addr('seller_payout'));
+
+        start_cheat_block_timestamp_global(CLOSE - 1);
+        start_cheat_caller_address(auction_address, POOL());
+        auction.privacy_invoke(PoolOperation::Commit, 'commitment', 'handle', 0, 0);
     }
 
     // Invariant 5, fuzzed. The running top-two update has to be right for

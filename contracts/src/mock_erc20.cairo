@@ -75,3 +75,67 @@ pub mod MockERC20 {
         }
     }
 }
+
+/// A token whose `balance_of` reenters the auction and cancels it.
+///
+/// Tests only. Models a hostile token supplied at construction: `balance_of`
+/// looks like a read, so it is easy to assume it cannot reenter, but a view
+/// function may still call another contract and that call may mutate.
+#[starknet::interface]
+pub trait IReentrantToken<TContractState> {
+    fn arm(
+        ref self: TContractState,
+        auction: starknet::ContractAddress,
+        seller_secret: felt252,
+        payout: starknet::ContractAddress,
+    );
+    fn transfer(ref self: TContractState, recipient: starknet::ContractAddress, amount: u256)
+        -> bool;
+    fn balance_of(self: @TContractState, account: starknet::ContractAddress) -> u256;
+    fn mint(ref self: TContractState, recipient: starknet::ContractAddress, amount: u256);
+}
+
+#[starknet::contract]
+pub mod ReentrantToken {
+    use starknet::storage::{StoragePointerReadAccess, StoragePointerWriteAccess};
+    use starknet::ContractAddress;
+    use super::super::auction::{ISealedAuctionDispatcher, ISealedAuctionDispatcherTrait};
+
+    #[storage]
+    struct Storage {
+        auction: ContractAddress,
+        seller_secret: felt252,
+        payout: ContractAddress,
+        armed: bool,
+    }
+
+    #[abi(embed_v0)]
+    impl ReentrantTokenImpl of super::IReentrantToken<ContractState> {
+        fn arm(
+            ref self: ContractState,
+            auction: ContractAddress,
+            seller_secret: felt252,
+            payout: ContractAddress,
+        ) {
+            self.auction.write(auction);
+            self.seller_secret.write(seller_secret);
+            self.payout.write(payout);
+            self.armed.write(true);
+        }
+
+        fn transfer(ref self: ContractState, recipient: ContractAddress, amount: u256) -> bool {
+            true
+        }
+
+        fn balance_of(self: @ContractState, account: ContractAddress) -> u256 {
+            if self.armed.read() {
+                ISealedAuctionDispatcher { contract_address: self.auction.read() }
+                    .cancel(self.seller_secret.read(), self.payout.read());
+            }
+            // Large enough that the arrival check would otherwise pass.
+            1000000000000
+        }
+
+        fn mint(ref self: ContractState, recipient: ContractAddress, amount: u256) {}
+    }
+}

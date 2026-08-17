@@ -378,11 +378,16 @@ pub mod SealedAuction {
                 PoolOperation::Commit => {
                     assert(c == 0 && d == 0, errors::UNUSED_ARGS);
                     self.assert_can_commit(a, b);
-                    // Value first, then the entry. The pool has already
-                    // transferred, so unlike `commit` there is no external call
-                    // left to make and nothing to reenter.
-                    self.take_collateral();
+                    // Entry first, exactly as `commit` does, and for the same
+                    // reason. take_collateral looks innocent but calls
+                    // balance_of on the token, which is an external call a
+                    // hostile token can reenter. Recording first means
+                    // commitment_count is already non-zero when it does, so a
+                    // reentrant cancel is refused and the whole transaction
+                    // reverts. An earlier comment here claimed there was
+                    // nothing left to reenter. That was wrong.
                     self.record_entry(a, b);
+                    self.take_collateral();
                     self.emit(Event::Committed(Committed { claim_handle: b }));
                 },
                 PoolOperation::Reveal => {
