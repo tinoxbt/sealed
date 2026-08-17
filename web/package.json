@@ -11,7 +11,8 @@
     "vectors:negative": "tsc -p tsconfig.scripts.json && SEALED_CORRUPT_VECTOR=1 node dist/scripts/check-vectors.js",
     "vectors:emit": "tsc -p tsconfig.scripts.json && node dist/scripts/emit-cairo-vectors.js",
     "payout": "tsx scripts/check-payout.ts",
-    "create": "tsx scripts/check-create.ts"
+    "create": "tsx scripts/check-create.ts",
+    "discovery": "tsx scripts/check-discovery.ts"
   },
   "dependencies": {
     "@starknet-io/get-starknet-discovery": "^6.0.2",
