@@ -243,13 +243,14 @@ pub mod SealedAuction {
 
     #[event]
     #[derive(Drop, starknet::Event)]
-    enum Event {
+    pub enum Event {
         Committed: Committed,
         Revealed: Revealed,
         Settled: Settled,
         Claimed: Claimed,
         ProceedsClaimed: ProceedsClaimed,
         Cancelled: Cancelled,
+        AuctionCreated: AuctionCreated,
     }
 
     #[derive(Drop, starknet::Event)]
@@ -287,6 +288,25 @@ pub mod SealedAuction {
     #[derive(Drop, starknet::Event)]
     struct Cancelled {}
 
+    /// Emitted once, at construction, so auctions can be found without a
+    /// backend or a factory.
+    ///
+    /// A getEvents query filtered on this event's key alone, with no contract
+    /// address, returns every Sealed auction ever deployed, because the event
+    /// key is the same for all of them and the auction's own address arrives as
+    /// the event's from_address. That is the whole discovery mechanism: no
+    /// registry to keep in sync, nothing to go stale, and it survives any
+    /// off-chain service being down.
+    #[derive(Drop, starknet::Event)]
+    pub struct AuctionCreated {
+        #[key]
+        pub token: ContractAddress,
+        pub reserve_price: u256,
+        pub collateral: u256,
+        pub close_time: u64,
+        pub reveal_deadline: u64,
+    }
+
     #[constructor]
     fn constructor(
         ref self: ContractState,
@@ -323,6 +343,15 @@ pub mod SealedAuction {
         self.close_time.write(close_time);
         self.reveal_deadline.write(reveal_deadline);
         self.state.write(AuctionState::Open);
+
+        self
+            .emit(
+                Event::AuctionCreated(
+                    AuctionCreated {
+                        token, reserve_price, collateral, close_time, reveal_deadline,
+                    },
+                ),
+            );
     }
 
     #[abi(embed_v0)]

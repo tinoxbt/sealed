@@ -8,13 +8,13 @@
 mod tests {
     use core::poseidon::poseidon_hash_span;
     use snforge_std::{
-        ContractClassTrait, DeclareResultTrait, declare, start_cheat_block_timestamp_global,
-        start_cheat_caller_address, stop_cheat_caller_address,
+        ContractClassTrait, DeclareResultTrait, EventSpyAssertionsTrait, declare, spy_events,
+        start_cheat_block_timestamp_global, start_cheat_caller_address, stop_cheat_caller_address,
     };
     use starknet::ContractAddress;
     use super::super::auction::{
         AuctionState, EntryStatus, ISealedAuctionDispatcher, ISealedAuctionDispatcherTrait,
-        PoolOperation,
+        PoolOperation, SealedAuction,
     };
     use super::super::mock_erc20::{
         IMockERC20Dispatcher, IMockERC20DispatcherTrait, IReentrantTokenDispatcher,
@@ -883,6 +883,48 @@ mod tests {
                 assert(*panic_data.at(0) == 'zero claim handle', 'wrong rejection reason');
             },
         }
+    }
+
+    // Discovery rests entirely on this event existing. A getEvents query
+    // filtered on its key alone returns every Sealed auction, so if the
+    // constructor stops emitting it, auctions become invisible to the app while
+    // still working perfectly on chain, which is a failure nobody would notice
+    // until a seller asks why their listing is missing.
+    #[test]
+    fn constructor_announces_the_auction() {
+        let token_class = declare("MockERC20").unwrap().contract_class();
+        let (token_address, _) = token_class.deploy(@array![]).unwrap();
+
+        let mut calldata: Array<felt252> = array![];
+        handle(SELLER_SECRET, addr('seller_payout')).serialize(ref calldata);
+        token_address.serialize(ref calldata);
+        POOL().serialize(ref calldata);
+        RESERVE.serialize(ref calldata);
+        COLLATERAL.serialize(ref calldata);
+        CLOSE.serialize(ref calldata);
+        DEADLINE.serialize(ref calldata);
+
+        let mut spy = spy_events();
+        let auction_class = declare("SealedAuction").unwrap().contract_class();
+        let (auction_address, _) = auction_class.deploy(@calldata).unwrap();
+
+        spy
+            .assert_emitted(
+                @array![
+                    (
+                        auction_address,
+                        SealedAuction::Event::AuctionCreated(
+                            SealedAuction::AuctionCreated {
+                                token: token_address,
+                                reserve_price: RESERVE,
+                                collateral: COLLATERAL,
+                                close_time: CLOSE,
+                                reveal_deadline: DEADLINE,
+                            },
+                        ),
+                    ),
+                ],
+            );
     }
 
     // Invariant 5, fuzzed. The running top-two update has to be right for
