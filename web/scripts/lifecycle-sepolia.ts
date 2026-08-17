@@ -27,7 +27,7 @@ const RPC = process.env.SEALED_RPC ?? "https://api.cartridge.gg/x/starknet/sepol
 /// Must track the deployed class. A stale hash here silently exercises an
 /// older contract and reports green against code nobody is shipping.
 const CLASS_HASH = process.env.SEALED_CLASS_HASH ??
-  "0x41d1ca82df89aec29334c41c5c37c724a91b231fec971fcc0f457de2c6809b1";
+  "0x68d3a5ebe037914e8368fd367adbd26849daa80342fa5d2d85827cc538bcc66";
 const TOKEN = "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d";
 const POOL = "0x0254a6b2997ef52e9f830ce1f543f6b29768295e8d17e2267d672c552cfe0d91";
 
