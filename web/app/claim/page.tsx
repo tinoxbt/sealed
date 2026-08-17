@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useState } from "react";
 import {
-  claimCall,
   readAuction,
   readEntryStatus,
   settleCall,
@@ -12,6 +11,7 @@ import {
 } from "../../src/lib/auction";
 import type { BidBackup } from "../../src/lib/backup";
 import { useWallet } from "../../src/lib/useWallet";
+import { buildClaimActions } from "../../src/lib/wallet";
 import { BackupLoader } from "../../src/components/BackupLoader";
 import { WalletBar } from "../../src/components/WalletBar";
 
@@ -61,7 +61,12 @@ export default function ClaimPage() {
     setError("");
     setBusy("Waiting for the wallet");
     try {
-      const res = await w.account.execute([claimCall(backup.claimSecret, backup.payoutAddress)]);
+      // Through the pool, so the claim has no bidder-controlled sender
+      // either. The payout address is unchanged: the contract recomputes the
+      // handle and will pay nothing else.
+      const res = await w.account.strk20InvokeTransaction(
+        buildClaimActions(w.address, backup.claimSecret, backup.payoutAddress),
+      );
       setTxHash(res.transaction_hash);
       setStatus(await readEntryStatus(backup.claimHandle));
     } catch (e) {

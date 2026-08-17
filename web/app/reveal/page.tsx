@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { readEntryStatus, revealCall, type EntryStatus } from "../../src/lib/auction";
+import { readEntryStatus, type EntryStatus } from "../../src/lib/auction";
+import { buildRevealActions } from "../../src/lib/wallet";
 import type { BidBackup } from "../../src/lib/backup";
 import { parseStrk } from "../../src/lib/secrets";
 import { useWallet } from "../../src/lib/useWallet";
@@ -32,9 +33,17 @@ export default function RevealPage() {
     setError("");
     setBusy("Waiting for the wallet");
     try {
-      const res = await w.account.execute([
-        revealCall(parseStrk(backup.bidAmountStrk), backup.bidSalt, backup.claimHandle),
-      ]);
+      // Through the pool, not straight to the contract. A direct call would
+      // put this wallet's address next to the bid amount forever, undoing what
+      // the commit protected.
+      const res = await w.account.strk20InvokeTransaction(
+        buildRevealActions(
+          w.address,
+          parseStrk(backup.bidAmountStrk),
+          backup.bidSalt,
+          backup.claimHandle,
+        ),
+      );
       setTxHash(res.transaction_hash);
       setStatus(await readEntryStatus(backup.claimHandle));
     } catch (e) {
@@ -94,14 +103,14 @@ export default function RevealPage() {
 
           {status === "Committed" && (
             <>
-              <Note tone="amber">
-                The address that sends this transaction is public, and it will be permanently
-                linked to this bid amount. Use an account that is not connected to you. Your main
-                wallet undoes the unlinkability the bid was built to give you.
+              <Note tone="neutral">
+                Your bid amount becomes public now. That is what revealing is, and every
+                sealed-bid auction ends this way.
                 <br />
                 <br />
-                Anyone can submit a reveal, because the contract checks the salt against the
-                commitment rather than checking who sent it.
+                Who revealed it does not become public. This goes through the privacy pool, so
+                the auction sees the pool as the caller and a relayer submits the transaction.
+                Your wallet does not appear.
               </Note>
 
               <WalletBar {...w} connect={w.connect} />
