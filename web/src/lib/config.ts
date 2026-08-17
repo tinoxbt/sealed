@@ -6,7 +6,7 @@
 /// back, is how a testnet address reaches production.
 export const AUCTION_ADDRESS =
   process.env.NEXT_PUBLIC_AUCTION_ADDRESS ??
-  "0x00bb79c9cbc96a04ef1bac51805de8642dd20f98ecd980dd208b03c931e6be87";
+  "0x0575e771aeeb47e81f094360e18f61ca5190e77043783ac0d28f9e95c2b8412b";
 
 /// STRK. Same address on Sepolia and mainnet.
 export const TOKEN_ADDRESS =

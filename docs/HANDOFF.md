@@ -430,3 +430,22 @@ bill. Proof it was never a contract fault is that the auction balance was
 already exactly 0, meaning 3 STRK in and 3 STRK out. Fixed by paying proceeds to
 an address that never sends transactions. Loosening the tolerance would have
 hidden the real lesson: never measure a payout on the account paying the fees.
+
+### Blocked, 17 August 2026: the deployer cannot afford a declare
+
+The contract has three fixes from an independent review that are **not on any
+deployed class**: zero `claim_handle` and zero `bid_commitment` refused at
+commit, entry recorded before the token balance is read, and a zero
+`seller_handle` refused at construction. All are committed and covered by
+tests, and none of them are on chain.
+
+Declaring costs roughly 24 STRK at the L2 gas price Sepolia currently requires,
+and `sealed-deployer` holds about 16. The account needs topping up from a
+Sepolia faucet before the fixed class can be declared.
+
+The auction currently wired into the frontend, at
+`0x0575e771aeeb47e81f094360e18f61ca5190e77043783ac0d28f9e95c2b8412b`, runs
+class `0x68d3a5eb...`, which has the multiplexed `privacy_invoke` the frontend
+expects but **not** the three fixes. It is fine for exercising the interface and
+must not be the basis for any claim about the contract being sound. Nothing goes
+to mainnet from this class.
