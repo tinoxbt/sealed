@@ -1,6 +1,11 @@
 # Proposal: route reveal through the pool
 
-**Status: proposed, not adopted. The design is supported by source analysis but has never been executed as a transaction.** Nothing in `contracts/` or `web/` implements this. Adopting it changes the `privacy_invoke` calldata shape, so it requires a redeploy and a frontend change together.
+**Status: adopted 16 August 2026, implemented, and not yet executed on a network.**
+
+`privacy_invoke` now multiplexes commit, reveal and claim. 40 contract tests
+pass. The frontend composes the actions. What remains unproven is the part no
+test can cover: that the wallet assembles a value-free invoke and the proving
+service accepts it. The first live reveal is the test. Nothing in `contracts/` or `web/` implements this. Adopting it changes the `privacy_invoke` calldata shape, so it requires a redeploy and a frontend change together.
 
 Written 16 August 2026, day 3, with the contract complete, the Sepolia lifecycle verified, and mainnet not yet attempted.
 
@@ -145,7 +150,7 @@ It is weaker than routing through the pool, because the fresh account still appe
 
 ## 7. Decision
 
-Recommended order:
+Adopted. What was decided and why, kept as the record:
 
 1. **Verify the assumption in section 3 on Sepolia.** Half an hour, no code.
 2. **Only if it holds, and only before mainnet**, implement. Afterwards the redeploy cost changes character.

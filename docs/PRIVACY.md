@@ -47,17 +47,13 @@ Sealed does not claim a position cannot be tracked. It claims a position cannot 
 
 Ordered by how much they matter in practice.
 
-**1. The reveal transaction has an ordinary public sender, and it names both the bid amount and the claim handle.** This is the largest practical leak in the design. A bidder who reveals from the wallet they shielded from links that wallet to their bid and undoes what the commit protected. Reveal is permissionless, because the contract checks the salt against the commitment and never checks who sent it, so the transaction can come from any account or be relayed. The interface warns at the moment of revealing. It cannot enforce it.
+**1. The reveal and claim transactions used to carry an ordinary public sender. This is now closed, and the history is worth keeping.**
 
-Observed on Sepolia rather than argued: a bidder placed two bids, which arrived through two different relayers with no address in either, and were unlinkable both to the bidder and to each other. Both reveals then went out through a relayer too, which looks protective, but a reveal is an ordinary call wrapped in outside execution and the bidder's account address sits in the public calldata beside the amount and the handle. The two reveals carried the same account, so they linked each bid to the bidder and also linked the two bids to one another, exposing that a single person had placed both. Everything the commit protected was undone in two transactions.
+This was the largest practical leak in the design, and it was observed on Sepolia rather than argued. A bidder placed two bids. Both arrived through different relayers with no bidder address in either, unlinkable to the bidder and to each other. Both reveals then went out through a relayer too, which looks protective, but a reveal was an ordinary contract call wrapped in outside execution, and the bidder's account address sat in the public calldata beside the amount and the handle. The two reveals carried the same account, so each bid was linked to the bidder and the two bids were linked to one another, exposing that one person had placed both. Everything the commit protected was undone in two transactions.
 
-Routing reveal through the pool would close this properly, and is written up as a proposal in `docs/POOL_REVEAL.md`, unadopted and resting on one unverified assumption.
+Reveal and claim now route through the pool, the same way a bid does. The auction sees the pool as its caller, a relayer submits, and no bidder-controlled address appears at any phase of an auction. `privacy_invoke` multiplexes commit, reveal and claim, and the plain entrypoints remain as a fallback.
 
-**2. Shielding immediately before committing creates a timing link.** It also simply does not work: the pool requires every transaction to spend a matured note, and a fresh deposit does not qualify for roughly ten blocks, so a bid placed seconds after shielding is rejected with `NO_REPLAY_PROTECTION` before the auction contract is reached. The protocol and the privacy model happen to want the same thing here. A thin anonymity set also weakens the guarantee toward nothing. Shield well ahead of any auction you intend to bid in.
-
-**3. Commitment timing is public.** A bidder committing alone in a quiet hour is weakly linkable by timing alone, regardless of what the pool does.
-
-**4. Claim amounts are visible, so the winner is identifiable after settlement.** The winner's claim is `collateral - clearing_price` while every loser's is the full collateral, so the winning payout address stands out. It remains unlinked to a main wallet, provided the payout is re-shielded rather than swept somewhere identifying.
+**Not yet exercised on a network.** The contract path is covered by tests, including that a pool-routed reveal still checks the commitment and a pool-routed claim still refuses a redirected payout. But no reveal or claim has been submitted through the pool on chain, and the currently deployed Sepolia auction is on the previous calldata shape. Until a redeploy and a live run, this is verified in the small and unproven in the large.
 
 **5. After reveal, all bids are public.** This is what a sealed-bid auction promises offline, and nothing more. Sealed is commit-reveal, not a circuit that keeps bids secret forever.
 

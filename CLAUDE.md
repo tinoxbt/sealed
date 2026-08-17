@@ -21,7 +21,7 @@ Do not change these without an explicit instruction. They are scope decisions, n
 - **Zero valid reveals settles with no winner** and the seller claims the entire pot, since every entry is forfeited.
 - **The contract never stores a bidder address.** Entries are keyed by `claim_handle` only. A `ContractAddress` field in `Entry` creates a public depositor-to-position map and destroys the privacy property. This is a bug, not an optimisation.
 - **Settle moves no money.** It records winner and clearing price. All value leaves through individual `claim` calls.
-- **Two commit paths, one ledger.** `commit` pulls with `transfer_from`. `privacy_invoke` is called by the pool after it has already delivered the collateral in the same transaction. Both verify arrival against the `escrowed` ledger and never read an amount from calldata. Keep both: `commit` is the no-redeploy fallback if the pool path misbehaves. Custody stays ordinary ERC20 and no note is carried across time. See `docs/HELPER_CUSTODY.md`.
+- **Every phase has a pool path and a plain path.** `privacy_invoke` multiplexes Commit, Reveal and Claim on an operation discriminator, because the pool always dispatches to one selector. Commit pulls nothing: the pool has already delivered, and arrival is verified against the `escrowed` ledger rather than read from calldata. Reveal and Claim move no value of their own. Keep the plain `commit`, `reveal` and `claim` entrypoints as the no-redeploy fallback, so a stuck pool cannot strand a claim. Custody stays ordinary ERC20 and no note is carried across time. See `docs/HELPER_CUSTODY.md` and `docs/POOL_REVEAL.md`.
 - **One token, one item, one round.** STRK only. No multi-item, no multi-round, no upgradeability, no proxy, no reputation system, no arbitration.
 - **No new cryptography.** The privacy machinery is STRK20's.
 
@@ -73,7 +73,8 @@ main wallet -> shield -> pool
 - Persist to localStorage keyed by auction id, and force a JSON backup download immediately after commit, before the confirmation screen. Not skippable. Losing `claim_secret` means funds are unrecoverable.
 - The contract is the only source of truth for auction state. Supabase is metadata and reminders. If Supabase is down, the auction still settles.
 - Warn users to shield well ahead of an auction. Shielding immediately before committing creates a timing link the pool cannot hide.
-- Warn at the moment of revealing that the sending address is public and will be linked to the bid amount. Reveal is permissionless, so it can come from any account or be relayed. This is the largest practical leak in the design.
+- Reveal and claim go through the pool, never `account.execute`. A direct call puts the connected wallet beside the bid amount and the claim handle, which is exactly what the commit was built to prevent. Both carry a one-unit self-transfer, because the pool rejects a transaction that spends no matured note and an invoke spends nothing.
+- Do not tell users to reveal from a separate account. That was advice for a leak that no longer exists, and following it now is worse than ignoring it: a fresh account funded from a main wallet recreates the link it was meant to avoid.
 
 ## Commits
 
@@ -95,7 +96,7 @@ Never use `--no-verify` to get past the hook without saying why in the body.
 
 - No em dashes or en dashes anywhere in code comments, docs, or UI copy.
 - Plain, direct prose in documentation. No marketing voice.
-- Small, reviewable contract. Target under 300 lines.
+- Small, reviewable contract. Under 400 lines of code, excluding comments. It was 300 before the pool-driven commit, reveal and claim paths were added; the target moved once, deliberately, and is not a licence to keep moving it.
 - Tests before frontend work.
 
 ## Documentation is 15 percent of the score

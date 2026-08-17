@@ -481,7 +481,7 @@ the ones that matter:
 The auction contract itself is unaffected either way. It receives ERC20 and pays to
 a committed address, and knows nothing about how value arrives.
 
-## (d) Option B verified, and a better option found
+## (e) Option B verified, and a better option found
 
 Checked 15 August 2026 against `@starknet-io/types-js` `src/wallet-api/components.ts`
 and `strk20-starter-kit`.
