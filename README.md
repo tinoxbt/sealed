@@ -19,6 +19,80 @@ The uniform collateral is the part that is easy to get wrong. If each bidder esc
 
 Second-price is not decoration either. Under a sealed-bid second-price rule, bidding your true value is the dominant strategy, so the mechanism only produces honest bids if the bids are genuinely sealed. Privacy is what makes the mechanism work rather than a feature bolted onto it.
 
+## Against RFP-08, stated plainly
+
+Sealed was built for [idea 08](https://strk20.starknet.io/rfp/sealed-bid-auctions),
+which asks for sealed-bid auctions "where the bids are actually sealed". That
+page contains a table headed *Why this isn't just commit-reveal*, and its first
+row is commit-reveal. Sealed is commit-reveal. Here is what that means, before
+anyone else has to point it out.
+
+| RFP-08 asks for | Sealed |
+| --- | --- |
+| Listing, bidding, reveal phases | Yes |
+| Bids as encrypted notes carrying real escrowed funds | No. Poseidon commitments plus uniform collateral in plain ERC20 |
+| Reveal by selective disclosure of viewing key material | No. Reveal opens a hash preimage |
+| Revealed amounts must match or the bid is forfeit | Yes |
+| Force-reveal by threshold auditing when a bidder is offline | No. Forfeiture prices silence, and a keeper reveals for anyone who opts in |
+| First-price, Vickrey and multi-unit on one contract | Vickrey only |
+
+### Why the specified design was not built
+
+It needs three things, and research during the first two days found none of them
+available to a contract. The findings are in `docs/reference/NOTES.md`.
+
+**Notes cannot escrow a hidden amount with a contract.** A note's amount is
+concealed only while it stays inside the pool. Withdrawing to a contract makes
+the amount a public ERC20 leg, which is precisely the leak uniform collateral
+exists to neutralise. Leaving it in the pool means the auction never takes
+custody, which lands on the multi-user note lifecycle question that has no
+reference implementation.
+
+**There is no selective disclosure to a contract.** Viewing keys are escrowed to
+a governance-appointed auditor for lawful requests. Nothing exposes "prove this
+note's amount to this contract".
+
+**Threshold auditing is compliance machinery**, not a product mechanism, and
+nothing exposes it as one.
+
+The idea page was published in May and describes what the pool should enable.
+Sealed is what could be deployed in August.
+
+### Their three objections to commit-reveal, answered
+
+**"Bidders grief by not revealing."** Forfeiture makes silence cost the entire
+collateral, so it is priced rather than free. Term Finance clears hundreds of
+millions on Ethereum using sealed-bid second-price auctions with exactly this
+shape. Their answer to the offline bidder is protocol keepers, and Sealed now
+has one: `web/scripts/keeper.ts`. Griefing is not eliminated, and `MECHANISM.md`
+says so.
+
+**"Timing leaks info."** Partly answered. Commitment and reveal timing is public
+and a lone reveal in a quiet window is weakly linkable. What does not leak is
+who did it.
+
+**"Gas friction."** Real, and unanswered. Bidding is one transaction, revealing
+is another, claiming is a third.
+
+### What Sealed has that RFP-08 did not ask for
+
+The idea page is about hiding bid values. It does not discuss hiding bidders.
+
+- No bidder-controlled address appears at any phase. Bid, reveal and claim all
+  go through the pool and a relayer submits each one.
+- The contract never stores a bidder address. Entries are keyed by hash alone.
+- Claims are bound to a destination committed before bidding, so a claim secret
+  sitting in public calldata still cannot be redirected.
+- The seller is anonymous by the same mechanism.
+- No prover, no committee, no trusted auctioneer, no infrastructure of any kind.
+  The page's own table rejects threshold MPC for committee collusion and a
+  trusted auctioneer for seeing everything. Sealed needs neither.
+
+**In one line.** RFP-08 asked for bids no one can read until reveal, including
+the auctioneer. Sealed delivers bids no one can read until reveal, and bidders
+no one can identify at all. The first needs a primitive the pool does not yet
+expose to contracts. The second needed only what shipped.
+
 ## Privacy model
 
 Stated plainly, including the parts that leak. The full version, including the third parties in the path, lives in [`docs/PRIVACY.md`](docs/PRIVACY.md).
