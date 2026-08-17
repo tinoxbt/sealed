@@ -1,35 +1,29 @@
 "use client";
 
-import { createStore, type Store } from "@starknet-io/get-starknet-discovery";
-import type { WalletWithStarknetFeatures } from "@starknet-io/get-starknet-wallet-standard/features";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import { WalletAccountV6, validateAndParseAddress, walletV6 } from "starknet";
 import { readAuction, type AuctionSummary } from "../src/lib/auction";
 import { AuctionList } from "../src/components/AuctionList";
 import { AuctionStatus } from "../src/components/AuctionStatus";
+import { WalletBar } from "../src/components/WalletBar";
 import { forceDownload, persist, type BidBackup } from "../src/lib/backup";
 import { bidCommitment, claimHandle } from "../src/commitment";
 import { AUCTION_ADDRESS } from "../src/lib/config";
 import { derivePayoutAccount } from "../src/lib/payout";
-import { provider } from "../src/lib/provider";
 import { formatStrk, parseStrk, randomFelt, splitU256, toHex } from "../src/lib/secrets";
+import { useWallet } from "../src/lib/useWallet";
 import {
   NotRegistered,
   buildBidActions,
   buildShieldActions,
   isNoteNotReady,
-  isSepolia,
   shieldedStrk,
 } from "../src/lib/wallet";
 
 type Submitted = { txHash: string; backup: BidBackup };
 
 export default function BidPage() {
-  const [wallets, setWallets] = useState<WalletWithStarknetFeatures[]>([]);
-  const [account, setAccount] = useState<WalletAccountV6 | null>(null);
-  const [address, setAddress] = useState("");
-  const [chainId, setChainId] = useState("");
+  const w = useWallet();
   const [shielded, setShielded] = useState<bigint | null>(null);
   const [auction, setAuction] = useState<AuctionSummary | null>(null);
   const [amount, setAmount] = useState("0.5");
@@ -39,13 +33,28 @@ export default function BidPage() {
   const [submitted, setSubmitted] = useState<Submitted | null>(null);
   const [registered, setRegistered] = useState(true);
 
-  // Build the discovery store once, so wallets have time to register before the
-  // user picks one. eip1193Adapters:[] keeps MetaMask's Snap probing out.
   useEffect(() => {
-    const store: Store = createStore({ eip1193Adapters: [] });
-    setWallets(store.getWallets().slice());
-    return store.subscribe((next) => setWallets(next.slice()));
-  }, []);
+    let current = true;
+    setShielded(null);
+    setRegistered(true);
+    if (!w.account) return;
+
+    // The balance lives on the bid page because reveal and claim never touch
+    // the pool, and unregistered accounts must still be able to use them.
+    void shieldedStrk(w.account)
+      .then((balance) => {
+        if (current) setShielded(balance);
+      })
+      .catch((e) => {
+        if (!current) return;
+        if (e instanceof NotRegistered) setRegistered(false);
+        else setError((e as Error).message);
+      });
+
+    return () => {
+      current = false;
+    };
+  }, [w.account]);
 
   const refresh = useCallback(async () => {
     try {
@@ -59,39 +68,13 @@ export default function BidPage() {
     void refresh();
   }, [refresh]);
 
-  async function connect(wallet: WalletWithStarknetFeatures) {
-    setError("");
-    setBusy("Connecting");
-    try {
-      const wa = await WalletAccountV6.connect(provider, wallet);
-      const accounts = await walletV6.requestAccounts(wallet);
-      if (!Array.isArray(accounts)) throw new Error("Wallet is not compatible");
-      setAccount(wa);
-      setAddress(validateAndParseAddress(accounts[0]));
-      const id = (await walletV6.requestChainId(wallet)) as string;
-      setChainId(id);
-      if (!isSepolia(id)) setError("Switch the wallet to Sepolia. This auction is a Sepolia deployment.");
-      try {
-        setShielded(await shieldedStrk(wa));
-        setRegistered(true);
-      } catch (e) {
-        if (e instanceof NotRegistered) setRegistered(false);
-        else throw e;
-      }
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy("");
-    }
-  }
-
   async function shield() {
-    if (!account) return;
+    if (!w.account) return;
     setError("");
     setBusy(`Shielding ${shieldAmount} STRK`);
     try {
-      await account.strk20InvokeTransaction(buildShieldActions(parseStrk(shieldAmount)));
-      setShielded(await shieldedStrk(account));
+      await w.account.strk20InvokeTransaction(buildShieldActions(parseStrk(shieldAmount)));
+      setShielded(await shieldedStrk(w.account));
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -100,7 +83,7 @@ export default function BidPage() {
   }
 
   async function bid() {
-    if (!account || !auction) return;
+    if (!w.account || !auction) return;
     setError("");
 
     let bidAmount: bigint;
@@ -158,7 +141,7 @@ export default function BidPage() {
       persist(backup);
 
       setBusy("Waiting for the wallet");
-      const res = await account.strk20InvokeTransaction(
+      const res = await w.account.strk20InvokeTransaction(
         buildBidActions(auction.collateral, toHex(commitment), toHex(handle)),
       );
 
@@ -236,32 +219,32 @@ export default function BidPage() {
 
       {error && <p className="rounded border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">{error}</p>}
 
-      {!account ? (
+      {!w.account ? (
         <section className="space-y-3">
           <h2 className="text-sm uppercase tracking-wide text-neutral-500">Connect a privacy wallet</h2>
-          {wallets.length === 0 && (
+          {w.wallets.length === 0 && (
             <p className="text-sm text-neutral-400">
               No Starknet wallet detected. Ready and Xverse support STRK20 on mainnet; Ready is the
               one to use on Sepolia.
             </p>
           )}
           <div className="flex flex-wrap gap-2">
-            {wallets.map((w) => (
+            {w.wallets.map((wallet) => (
               <button
-                key={w.name}
-                onClick={() => connect(w)}
-                className="rounded bg-neutral-800 px-4 py-2 hover:bg-neutral-700"
+                key={wallet.name}
+                onClick={() => void w.connect(wallet).catch((e) => setError((e as Error).message))}
+                disabled={w.connecting}
+                className="rounded bg-neutral-800 px-4 py-2 hover:bg-neutral-700 disabled:opacity-40"
               >
-                {w.name}
+                {wallet.name}
               </button>
             ))}
           </div>
         </section>
       ) : (
         <section className="space-y-4">
+          <WalletBar {...w} connect={w.connect} />
           <dl className="space-y-1 text-sm font-mono break-all text-neutral-400">
-            <Row label="account" value={address} />
-            <Row label="chain" value={isSepolia(chainId) ? "sepolia" : chainId} />
             <Row label="shielded" value={shielded === null ? "unknown" : `${formatStrk(shielded)} STRK`} />
           </dl>
 
