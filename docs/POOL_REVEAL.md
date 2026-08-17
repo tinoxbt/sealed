@@ -1,6 +1,6 @@
 # Proposal: route reveal through the pool
 
-**Status: proposed, not adopted, and resting on an assumption that has not been verified.** Nothing in `contracts/` or `web/` implements this. Adopting it changes the `privacy_invoke` calldata shape, so it requires a redeploy and a frontend change together.
+**Status: proposed, not adopted. The design is supported by source analysis but has never been executed as a transaction.** Nothing in `contracts/` or `web/` implements this. Adopting it changes the `privacy_invoke` calldata shape, so it requires a redeploy and a frontend change together.
 
 Written 16 August 2026, day 3, with the contract complete, the Sepolia lifecycle verified, and mainnet not yet attempted.
 
