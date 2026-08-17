@@ -356,6 +356,59 @@ mod tests {
         auction.claim(SELLER_SECRET, addr('seller_payout'));
     }
 
+    // A seller who sets a reveal window nobody can meet collects every
+    // collateral without selling anything: they receive all forfeitures AND
+    // choose the deadline. The constructor refuses the setup rather than
+    // relying on bidders to notice.
+    #[test]
+    fn constructor_rejects_unmeetable_reveal_window() {
+        let token_class = declare("MockERC20").unwrap().contract_class();
+        let (token_address, _) = token_class.deploy(@array![]).unwrap();
+
+        let mut calldata: Array<felt252> = array![];
+        handle(SELLER_SECRET, addr('seller_payout')).serialize(ref calldata);
+        token_address.serialize(ref calldata);
+        POOL().serialize(ref calldata);
+        RESERVE.serialize(ref calldata);
+        COLLATERAL.serialize(ref calldata);
+        CLOSE.serialize(ref calldata);
+        // One second to reveal. Ordered correctly, and still unmeetable.
+        (CLOSE + 1).serialize(ref calldata);
+
+        // Matched rather than unwrapped: unwrap replaces the constructor's
+        // panic with its own, so should_panic would have accepted any deploy
+        // failure at all and proved nothing about this guard.
+        let auction_class = declare("SealedAuction").unwrap().contract_class();
+        match auction_class.deploy(@calldata) {
+            Result::Ok(_) => panic!("a one second reveal window was accepted"),
+            Result::Err(panic_data) => {
+                assert(*panic_data.at(0) == 'reveal window too short', 'wrong rejection reason');
+            },
+        }
+    }
+
+    // The floor itself is allowed, so the guard rejects only what it must.
+    #[test]
+    fn constructor_accepts_the_minimum_window() {
+        let token_class = declare("MockERC20").unwrap().contract_class();
+        let (token_address, _) = token_class.deploy(@array![]).unwrap();
+
+        let mut calldata: Array<felt252> = array![];
+        handle(SELLER_SECRET, addr('seller_payout')).serialize(ref calldata);
+        token_address.serialize(ref calldata);
+        POOL().serialize(ref calldata);
+        RESERVE.serialize(ref calldata);
+        COLLATERAL.serialize(ref calldata);
+        CLOSE.serialize(ref calldata);
+        (CLOSE + 600).serialize(ref calldata);
+
+        let auction_class = declare("SealedAuction").unwrap().contract_class();
+        let (address, _) = auction_class.deploy(@calldata).unwrap();
+        let auction = ISealedAuctionDispatcher { contract_address: address };
+        let (close, deadline) = auction.get_timing();
+        assert(deadline - close == 600, 'minimum window accepted');
+    }
+
     // Not one of the twelve, but each of these is a way the contract could
     // leak money or lock it up, so they are worth pinning down.
 

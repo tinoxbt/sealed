@@ -162,9 +162,24 @@ pub mod SealedAuction {
         pub const BAD_DEADLINES: felt252 = 'bad deadlines';
         pub const ZERO_COLLATERAL: felt252 = 'zero collateral';
         pub const RESERVE_ABOVE_COLLATERAL: felt252 = 'reserve above collateral';
+        pub const REVEAL_WINDOW_TOO_SHORT: felt252 = 'reveal window too short';
         pub const NOT_POOL: felt252 = 'caller not pool';
         pub const NOT_RECEIVED: felt252 = 'collateral not received';
     }
+
+    /// Shortest reveal window a seller may set.
+    ///
+    /// The seller receives every forfeited collateral AND chooses the reveal
+    /// deadline. Without a floor those two facts combine into an attack: set
+    /// the deadline one second after close, nobody can reveal in time, every
+    /// entry forfeits, and the seller takes the whole pot without selling
+    /// anything.
+    ///
+    /// Ten minutes stops the absurd case. It is not a substitute for the
+    /// bidder reading the window before they bid, which is why the interface
+    /// shows it. A seller running a real auction should allow hours or days,
+    /// and MECHANISM.md says so.
+    pub const MIN_REVEAL_WINDOW: u64 = 600;
 
     #[storage]
     struct Storage {
@@ -255,6 +270,10 @@ pub mod SealedAuction {
         reveal_deadline: u64,
     ) {
         assert(close_time < reveal_deadline, errors::BAD_DEADLINES);
+        // Not merely ordered: far enough apart that revealing is possible.
+        assert(
+            reveal_deadline - close_time >= MIN_REVEAL_WINDOW, errors::REVEAL_WINDOW_TOO_SHORT,
+        );
         assert(collateral > 0, errors::ZERO_COLLATERAL);
         // Bids are capped at the collateral, so a reserve above it would make
         // every possible bid invalid.
