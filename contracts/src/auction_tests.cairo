@@ -760,6 +760,60 @@ mod tests {
         auction.privacy_invoke(PoolOperation::Commit, 'commitment', 'handle', 7, 0);
     }
 
+    // Found by an independent review. Zero is this contract's sentinel for both
+    // "no winner" and "no entry", and both fields arrive as plain calldata, so
+    // neither needed a hash preimage to forge.
+
+    // A zero claim_handle on a winning bid would be stored as winner_handle,
+    // which clearing_price reads as "nobody won". The seller would be paid
+    // nothing for the sale, and the collateral would be stranded: unclaimable
+    // because no preimage hashes to zero, and unforfeitable because the entry
+    // was revealed.
+    #[test]
+    #[should_panic(expected: 'zero claim handle')]
+    fn commit_rejects_a_zero_claim_handle() {
+        let b1 = addr('b1');
+        let (auction, _, _) = setup(array![b1].span());
+
+        start_cheat_caller_address(auction.contract_address, b1);
+        auction.commit('commitment', 0);
+    }
+
+    // A zero bid_commitment reads as "no entry here", so the same handle could
+    // be committed repeatedly, taking collateral each time while overwriting
+    // the previous entry.
+    #[test]
+    #[should_panic(expected: 'zero bid commitment')]
+    fn commit_rejects_a_zero_bid_commitment() {
+        let b1 = addr('b1');
+        let (auction, _, _) = setup(array![b1].span());
+
+        start_cheat_caller_address(auction.contract_address, b1);
+        auction.commit(0, 'handle');
+    }
+
+    // Both guards apply to the pool path too, which is where a hostile
+    // frontend would more plausibly reach them.
+    #[test]
+    #[should_panic(expected: 'zero claim handle')]
+    fn pool_commit_rejects_a_zero_claim_handle() {
+        let b1 = addr('b1');
+        let (auction, _, address) = setup(array![b1].span());
+
+        start_cheat_caller_address(address, POOL());
+        auction.privacy_invoke(PoolOperation::Commit, 'commitment', 0, 0, 0);
+    }
+
+    #[test]
+    #[should_panic(expected: 'zero bid commitment')]
+    fn pool_commit_rejects_a_zero_bid_commitment() {
+        let b1 = addr('b1');
+        let (auction, _, address) = setup(array![b1].span());
+
+        start_cheat_caller_address(address, POOL());
+        auction.privacy_invoke(PoolOperation::Commit, 0, 'handle', 0, 0);
+    }
+
     // Invariant 5, fuzzed. The running top-two update has to be right for
     // reveals arriving in any order, including ties and duplicates.
     #[test]

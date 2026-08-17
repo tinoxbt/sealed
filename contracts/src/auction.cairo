@@ -192,6 +192,8 @@ pub mod SealedAuction {
         pub const NOT_POOL: felt252 = 'caller not pool';
         pub const NOT_RECEIVED: felt252 = 'collateral not received';
         pub const UNUSED_ARGS: felt252 = 'unused args must be zero';
+        pub const ZERO_COMMITMENT: felt252 = 'zero bid commitment';
+        pub const ZERO_HANDLE: felt252 = 'zero claim handle';
     }
 
     /// Shortest reveal window a seller may set.
@@ -323,7 +325,7 @@ pub mod SealedAuction {
         /// The amount pulled is identical for every bidder, which is what stops
         /// the visible ERC20 leg from leaking the bid.
         fn commit(ref self: ContractState, bid_commitment: felt252, claim_handle: felt252) {
-            self.assert_can_commit(claim_handle);
+            self.assert_can_commit(bid_commitment, claim_handle);
 
             // Recorded before the transfer. A reentrant token calling back
             // into commit sees this handle already taken, and if the transfer
@@ -375,7 +377,7 @@ pub mod SealedAuction {
             match operation {
                 PoolOperation::Commit => {
                     assert(c == 0 && d == 0, errors::UNUSED_ARGS);
-                    self.assert_can_commit(b);
+                    self.assert_can_commit(a, b);
                     // Value first, then the entry. The pool has already
                     // transferred, so unlike `commit` there is no external call
                     // left to make and nothing to reenter.
@@ -635,9 +637,32 @@ pub mod SealedAuction {
         ///
         /// Reusing a handle would overwrite the first bidder's entry and strand
         /// their collateral, since payouts are keyed by handle alone.
-        fn assert_can_commit(self: @ContractState, claim_handle: felt252) {
+        fn assert_can_commit(
+            self: @ContractState, bid_commitment: felt252, claim_handle: felt252,
+        ) {
             assert(self.state.read() == AuctionState::Open, errors::NOT_OPEN);
             assert(get_block_timestamp() < self.close_time.read(), errors::CLOSED);
+
+            // Zero is this contract's sentinel in two places, and both are
+            // caller-supplied, so both must be refused at the door.
+            //
+            // A zero claim_handle would be stored as winner_handle on a winning
+            // reveal, and clearing_price reads winner_handle == 0 as "nobody
+            // won" and returns zero. The seller would be paid nothing for the
+            // sale, and the entry could never be claimed either, because no
+            // caller can produce a preimage hashing to zero. That collateral
+            // would sit in the contract forever, unforfeitable because the
+            // entry was revealed.
+            //
+            // A zero bid_commitment would mean "no entry here", so the same
+            // handle could be committed repeatedly, each time taking collateral
+            // and incrementing the count while overwriting the last entry.
+            //
+            // Neither requires finding a hash preimage. Both values arrive as
+            // plain calldata.
+            assert(bid_commitment != 0, errors::ZERO_COMMITMENT);
+            assert(claim_handle != 0, errors::ZERO_HANDLE);
+
             assert(
                 self.entries.entry(claim_handle).read().bid_commitment == 0,
                 errors::DUPLICATE_HANDLE,
