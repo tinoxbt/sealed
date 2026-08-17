@@ -4,7 +4,7 @@
 # wallet and the chain, so there is no server to run and nothing to keep alive.
 # The demo URL the sprint requires therefore cannot break because a backend
 # fell over.
-name: pages
+name: web
 
 on:
   push:
@@ -45,12 +45,19 @@ jobs:
         env:
           # Project sites live under /<repo>, not at the domain root.
           NEXT_PUBLIC_BASE_PATH: /sealed
+      # Uploaded even when the deploy is gated off, so the artifact is there to
+      # inspect and the build is proved to produce something publishable.
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web/out
 
+  # Skipped until Pages is enabled on the repository. Enable it, then set the
+  # repository variable PAGES_ENABLED to true, and the next push deploys.
+  # Without the gate this job fails on every push and leaves the repository
+  # showing a red check for a deliberate configuration choice.
   deploy:
     needs: build
+    if: vars.PAGES_ENABLED == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages
