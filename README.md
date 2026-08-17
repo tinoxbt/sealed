@@ -27,12 +27,14 @@ Stated plainly, including the parts that leak. The full version, including the t
 
 **Visible:** that the auction exists, the reserve price, the collateral amount, the number of commitments and the timing of each, the pool as the source of every collateral transfer, every revealed amount once the reveal window opens, the clearing price, each claim amount, and each payout address once claimed.
 
-**What unlinkability does and does not mean here.** The commit carries no bidder address, because the pool is its caller and a rotating relayer submits it. The chain sees the pool funding an entry and cannot see which shielded balance paid. This rests entirely on the pool's anonymity set: a bidder who shields moments before bidding, or bids while nobody else is using the pool, gets much less than this. Sealed does not claim a position cannot be tracked. It claims a position cannot be traced to a person, as far as the pool carries it.
+**What unlinkability does and does not mean here.** No bidder-controlled address appears at any phase. Bidding, revealing and claiming all go through the pool, so the auction's caller is always the pool and a rotating relayer always submits. The chain sees the pool funding an entry and cannot see which shielded balance paid. This rests entirely on the pool's anonymity set: a bidder who shields moments before bidding, or bids while nobody else is using the pool, gets much less than this. Sealed does not claim a position cannot be tracked. It claims a position cannot be traced to a person, as far as the pool carries it.
 
 Known limits:
 
 - Bids cannot exceed the collateral.
 - Shielding immediately before committing creates a timing link. The interface warns about this.
+- Your own wallet is visible once, when you shield. That is how anyone enters the pool and no route avoids it.
+- The pool records the withdrawing account encrypted to a governance-appointed auditor, decryptable under a lawful request. This is the pool's compliance design, described in `docs/PRIVACY.md`.
 - After the reveal window opens, all revealed bids are public. That is what a sealed-bid auction promises offline, and nothing more.
 - Claim amounts are visible, so after settlement the winning payout address is identifiable as the winner's. It remains unlinked to a main wallet if it is re-shielded.
 - Sealed settles money, not delivery. The contract has no view of whether the seller ships the item.
@@ -67,7 +69,7 @@ STRK20 pool
 
 ## Build status
 
-Day 2 of 17. Deployed to Sepolia, and the day 3 gate has passed.
+Day 4 of 17. Everything below is Sepolia. Mainnet has not been touched.
 
 | Piece | Status |
 | --- | --- |
@@ -75,20 +77,54 @@ Day 2 of 17. Deployed to Sepolia, and the day 3 gate has passed.
 | Repository, license, registration | Done |
 | Toolchain pinned, Scarb 2.20.0 and snforge 0.63.0 | Done |
 | Poseidon parity between Cairo and starknet.js | Done, shared fixture asserted on both sides |
-| Auction contract: commit, privacy_invoke, reveal, settle, claim | Done, 369 lines of code plus 156 of comment |
-| snforge tests covering all twelve invariants | Done, 31 passing, 2 fuzzed |
-| Auction deployed to Sepolia | Done, `0x04a7999f...6b319138` |
-| Day 3 gate: a composed withdraw plus privacy_invoke funds a commitment on Sepolia | **Passed**, `0x3e27d50c...817dc719` |
-| Frontend: bid, reveal, claim, settle and seller proceeds | Done, all four roles |
-| Full lifecycle exercised on Sepolia | Done, `scripts/lifecycle-sepolia.ts`, auction `0x3d838d8d...160ba58c` |
+| Auction contract | Done, 448 lines of code plus 237 of comment |
+| snforge tests | 47 passing, 2 fuzzed, covering all twelve invariants |
+| Day 3 gate: a composed withdraw plus `privacy_invoke` funds a commitment | **Passed** on day 2, `0x3e27d50c...817dc719` |
+| Full lifecycle on Sepolia: commit, reveal, settle, claim, forfeit | Done, `web/scripts/lifecycle-sepolia.ts` |
+| Reveal and claim routed through the pool | Done, no bidder address at any phase |
+| Independent review of the contract | Done, four findings, all fixed, all regression tested |
+| Auction discovery without a backend | Done, one event query, `web/src/lib/discovery.ts` |
+| Frontend: bid, reveal, claim, settle, seller proceeds, listing | Done |
+| Seller can list an auction from the browser | Done, `/create` |
 | Mainnet deployment and a live auction | Not started, prepared in `docs/MAINNET.md` |
-| PRIVACY.md, MECHANISM.md, HELPER_CUSTODY.md | Done |
+| Public demo URL | Not started, workflow ready in `.github/workflows/web.yml` |
 | Demo video | Not started |
 
-Everything above is Sepolia. `strk20.json` is deliberately empty: the sprint scores at least three
-**mainnet** transactions **that touched the pool**, and a testnet deploy is neither. Sepolia addresses
-and hashes are recorded in this section and in `docs/HANDOFF.md` instead, where they are labelled as
-what they are.
+Current Sepolia deployment: class `0x58f6401b...808eda268`, auction
+`0x01a691c5...8eb03f62`. Earlier deployments exist and are superseded; the
+class above is the first carrying all four review fixes.
+
+**`strk20.json` is deliberately empty of transactions.** The sprint scores at
+least three *mainnet* transactions *that touched the pool*, and a testnet
+deploy is neither. Sepolia hashes are recorded here and in `docs/HANDOFF.md`
+instead, labelled as what they are.
+
+**The contract is over its own size target.** `CLAUDE.md` says under 400 lines
+of code excluding comments and it is 448. The target moved from 300 to 400 once
+already, when the pool-driven paths were added. Everything since has been a
+review fix or the discovery event, all of which earn their place, but the number
+is over and is recorded here rather than moved again.
+
+### What an independent review found
+
+The contract was reviewed by a separate model after it was written, tested and
+deployed. Four findings, all real:
+
+- **Zero `claim_handle`.** Zero is the sentinel for "no winner". A bidder could
+  supply it directly, win, and the clearing price would read as zero: the seller
+  paid nothing for the sale, and that collateral stranded forever because the
+  entry was revealed and so could not be forfeited either.
+- **Zero `bid_commitment`.** Zero is also the sentinel for "no entry", so one
+  handle could be committed repeatedly, taking collateral each time.
+- **Ordering on the pool commit path.** Collateral was taken before the entry
+  was recorded, and taking it reads `balance_of`, which is an external call. A
+  hostile token could reenter `cancel` in that window.
+- **Zero `seller_handle`.** Makes `claim_proceeds` unsatisfiable, stranding the
+  seller's own proceeds.
+
+Each fix has a test that was confirmed to fail without it. Two of the four had
+been sitting in code that already carried auditor comments and had been called
+done, which is the argument for the review.
 
 ## Repository
 
