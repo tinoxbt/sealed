@@ -14,6 +14,7 @@ mod tests {
     use starknet::ContractAddress;
     use super::super::auction::{
         AuctionState, EntryStatus, ISealedAuctionDispatcher, ISealedAuctionDispatcherTrait,
+        PoolOperation,
     };
     use super::super::mock_erc20::{IMockERC20Dispatcher, IMockERC20DispatcherTrait};
 
@@ -530,7 +531,7 @@ mod tests {
         let ch = handle(secret, payout);
         let commitment = commitment(bid, salt, ch);
         start_cheat_caller_address(auction.contract_address, POOL());
-        auction.privacy_invoke(commitment, ch);
+        auction.privacy_invoke(PoolOperation::Commit, commitment, ch, 0, 0);
         stop_cheat_caller_address(auction.contract_address);
         ch
     }
@@ -545,7 +546,7 @@ mod tests {
 
         token.mint(auction_address, COLLATERAL);
         start_cheat_caller_address(auction.contract_address, b1);
-        auction.privacy_invoke('commitment', 'handle');
+        auction.privacy_invoke(PoolOperation::Commit, 'commitment', 'handle', 0, 0);
     }
 
     // The heart of it. The pool delivers less than the collateral, so the entry
@@ -571,7 +572,7 @@ mod tests {
 
         let ch = handle('sec1', addr('p1'));
         start_cheat_caller_address(auction.contract_address, POOL());
-        auction.privacy_invoke('commitment', ch);
+        auction.privacy_invoke(PoolOperation::Commit, 'commitment', ch, 0, 0);
     }
 
     // A second invoke cannot ride on the first one's collateral. escrowed has
@@ -586,7 +587,7 @@ mod tests {
 
         let ch2 = handle('sec2', addr('p2'));
         start_cheat_caller_address(auction.contract_address, POOL());
-        auction.privacy_invoke('commitment2', ch2);
+        auction.privacy_invoke(PoolOperation::Commit, 'commitment2', ch2, 0, 0);
     }
 
     // Phase rules apply identically to both paths.
@@ -659,6 +660,104 @@ mod tests {
         assert(close == CLOSE, 'close time');
         assert(deadline == DEADLINE, 'reveal deadline');
         assert(close < deadline, 'close before deadline');
+    }
+
+    // The pool-routed reveal. A bidder who reveals this way never appears as a
+    // transaction sender, which is the whole point: the bid was unlinkable and
+    // revealing from your own wallet would undo that.
+    #[test]
+    fn pool_reveal_matches_a_plain_reveal() {
+        let b1 = addr('b1');
+        let (auction, _, address) = setup(array![b1].span());
+        let h = do_commit(auction, b1, 500, 'salt1', 'sec1', addr('p1'));
+
+        start_cheat_block_timestamp_global(CLOSE + 1);
+        start_cheat_caller_address(address, POOL());
+        // amount_low, amount_high, salt, handle
+        auction.privacy_invoke(PoolOperation::Reveal, 500, 0, 'salt1', h);
+        stop_cheat_caller_address(address);
+
+        assert(auction.get_revealed_count() == 1, 'revealed via pool');
+        assert(auction.get_entry_status(h) == EntryStatus::Revealed, 'status revealed');
+    }
+
+    // Same authorisation rule as the commit path. Only the pool may drive it.
+    #[test]
+    #[should_panic(expected: 'caller not pool')]
+    fn pool_reveal_rejects_other_callers() {
+        let b1 = addr('b1');
+        let (auction, _, _) = setup(array![b1].span());
+        let h = do_commit(auction, b1, 500, 'salt1', 'sec1', addr('p1'));
+
+        start_cheat_block_timestamp_global(CLOSE + 1);
+        auction.privacy_invoke(PoolOperation::Reveal, 500, 0, 'salt1', h);
+    }
+
+    // A wrong salt fails identically through the pool. The commitment check is
+    // the same code, which is why do_reveal is shared rather than duplicated.
+    #[test]
+    #[should_panic(expected: 'commitment mismatch')]
+    fn pool_reveal_still_checks_the_commitment() {
+        let b1 = addr('b1');
+        let (auction, _, address) = setup(array![b1].span());
+        let h = do_commit(auction, b1, 500, 'salt1', 'sec1', addr('p1'));
+
+        start_cheat_block_timestamp_global(CLOSE + 1);
+        start_cheat_caller_address(address, POOL());
+        auction.privacy_invoke(PoolOperation::Reveal, 500, 0, 'wrong_salt', h);
+    }
+
+    // The pool-routed claim. Pays the address committed at bid time, exactly as
+    // the plain path does, so routing changes who submits and nothing else.
+    #[test]
+    fn pool_claim_pays_the_committed_address() {
+        let b1 = addr('b1');
+        let (auction, token, address) = setup(array![b1].span());
+        do_commit(auction, b1, 500, 'salt1', 'sec1', addr('p1'));
+
+        start_cheat_block_timestamp_global(CLOSE + 1);
+        auction.reveal(500, 'salt1', handle('sec1', addr('p1')));
+        start_cheat_block_timestamp_global(DEADLINE + 1);
+        auction.settle();
+
+        start_cheat_caller_address(address, POOL());
+        auction.privacy_invoke(PoolOperation::Claim, 'sec1', addr('p1').into(), 0, 0);
+        stop_cheat_caller_address(address);
+
+        // Sole bidder, so the clearing price is the reserve.
+        assert(token.balance_of(addr('p1')) == COLLATERAL - RESERVE, 'winner paid via pool');
+    }
+
+    // The destination is still bound by the handle, not chosen by the caller.
+    // The pool being the caller does not weaken invariant 9.
+    #[test]
+    #[should_panic(expected: 'entry not claimable')]
+    fn pool_claim_cannot_redirect_the_payout() {
+        let b1 = addr('b1');
+        let (auction, _, address) = setup(array![b1].span());
+        do_commit(auction, b1, 500, 'salt1', 'sec1', addr('p1'));
+
+        start_cheat_block_timestamp_global(CLOSE + 1);
+        auction.reveal(500, 'salt1', handle('sec1', addr('p1')));
+        start_cheat_block_timestamp_global(DEADLINE + 1);
+        auction.settle();
+
+        start_cheat_caller_address(address, POOL());
+        // Correct secret, attacker's address. The recomputed handle differs, so
+        // there is no such entry.
+        auction.privacy_invoke(PoolOperation::Claim, 'sec1', addr('attacker').into(), 0, 0);
+    }
+
+    // Unused calldata slots must be zero, so a frontend that shifts its
+    // arguments reverts instead of committing to something nobody intended.
+    #[test]
+    #[should_panic(expected: 'unused args must be zero')]
+    fn pool_commit_rejects_dirty_unused_args() {
+        let b1 = addr('b1');
+        let (auction, _, address) = setup(array![b1].span());
+
+        start_cheat_caller_address(address, POOL());
+        auction.privacy_invoke(PoolOperation::Commit, 'commitment', 'handle', 7, 0);
     }
 
     // Invariant 5, fuzzed. The running top-two update has to be right for

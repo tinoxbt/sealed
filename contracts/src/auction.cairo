@@ -86,6 +86,19 @@ pub enum EntryStatus {
     Claimed,
 }
 
+/// Which auction operation a pool-driven call is performing.
+///
+/// The pool always dispatches to `selector!("privacy_invoke")` and the wallet's
+/// invoke action carries no selector of its own, so one entrypoint multiplexes
+/// and the first calldata felt says which. Serialises as its variant index:
+/// Commit 0, Reveal 1, Claim 2.
+#[derive(Drop, Serde, Copy, PartialEq)]
+pub enum PoolOperation {
+    Commit,
+    Reveal,
+    Claim,
+}
+
 /// Must match `privacy::objects::OpenNoteDeposit` positionally. The pool
 /// deserialises whatever `privacy_invoke` returns using its own definition, so
 /// field order is part of the ABI contract, not a local choice.
@@ -107,8 +120,21 @@ pub struct Entry {
 #[starknet::interface]
 pub trait ISealedAuction<TContractState> {
     fn commit(ref self: TContractState, bid_commitment: felt252, claim_handle: felt252);
+    /// Called by the pool. Fixed arity across all three operations so the
+    /// calldata shape never depends on the operation, and unused slots must be
+    /// zero so a frontend that shifts its arguments reverts instead of
+    /// committing to something nobody meant.
+    ///
+    /// Commit  a = bid_commitment  b = claim_handle    c,d = 0
+    /// Reveal  a = amount_low      b = amount_high     c = bid_salt  d = claim_handle
+    /// Claim   a = claim_secret    b = payout_address  c,d = 0
     fn privacy_invoke(
-        ref self: TContractState, bid_commitment: felt252, claim_handle: felt252,
+        ref self: TContractState,
+        operation: PoolOperation,
+        a: felt252,
+        b: felt252,
+        c: felt252,
+        d: felt252,
     ) -> Span<OpenNoteDeposit>;
     fn reveal(ref self: TContractState, amount: u256, bid_salt: felt252, claim_handle: felt252);
     fn settle(ref self: TContractState);
@@ -141,7 +167,7 @@ pub mod SealedAuction {
     };
     use starknet::{ContractAddress, get_block_timestamp, get_caller_address, get_contract_address};
     use super::super::erc20::{IERC20Dispatcher, IERC20DispatcherTrait};
-    use super::{AuctionState, Entry, EntryStatus, OpenNoteDeposit};
+    use super::{AuctionState, Entry, EntryStatus, OpenNoteDeposit, PoolOperation};
 
     pub mod errors {
         pub const NOT_OPEN: felt252 = 'auction not open';
@@ -165,6 +191,7 @@ pub mod SealedAuction {
         pub const REVEAL_WINDOW_TOO_SHORT: felt252 = 'reveal window too short';
         pub const NOT_POOL: felt252 = 'caller not pool';
         pub const NOT_RECEIVED: felt252 = 'collateral not received';
+        pub const UNUSED_ARGS: felt252 = 'unused args must be zero';
     }
 
     /// Shortest reveal window a seller may set.
@@ -332,61 +359,59 @@ pub mod SealedAuction {
         /// Returns an empty span: no note is created and nothing is carried
         /// across time. Collateral stays here as ordinary ERC20 until `claim`.
         fn privacy_invoke(
-            ref self: ContractState, bid_commitment: felt252, claim_handle: felt252,
+            ref self: ContractState,
+            operation: PoolOperation,
+            a: felt252,
+            b: felt252,
+            c: felt252,
+            d: felt252,
         ) -> Span<OpenNoteDeposit> {
+            // The only authorisation this entrypoint has. Everything below
+            // trusts that the pool performed whatever value movement the
+            // operation implies, and nothing below reads an amount from
+            // calldata.
             assert(get_caller_address() == self.pool.read(), errors::NOT_POOL);
-            self.assert_can_commit(claim_handle);
 
-            // Value first, then the entry. The pool has already transferred, so
-            // unlike `commit` there is no external call left to make and nothing
-            // to reenter.
-            self.take_collateral();
-            self.record_entry(bid_commitment, claim_handle);
+            match operation {
+                PoolOperation::Commit => {
+                    assert(c == 0 && d == 0, errors::UNUSED_ARGS);
+                    self.assert_can_commit(b);
+                    // Value first, then the entry. The pool has already
+                    // transferred, so unlike `commit` there is no external call
+                    // left to make and nothing to reenter.
+                    self.take_collateral();
+                    self.record_entry(a, b);
+                    self.emit(Event::Committed(Committed { claim_handle: b }));
+                },
+                PoolOperation::Reveal => {
+                    // No value moves here. The pool carries the call only, so
+                    // the bidder never appears as a transaction sender.
+                    let amount = u256 {
+                        low: a.try_into().expect('amount low overflow'),
+                        high: b.try_into().expect('amount high overflow'),
+                    };
+                    self.do_reveal(amount, c, d);
+                },
+                PoolOperation::Claim => {
+                    assert(c == 0 && d == 0, errors::UNUSED_ARGS);
+                    let payout: ContractAddress = b.try_into().expect('bad payout address');
+                    self.do_claim(a, payout);
+                },
+            };
 
-            self.emit(Event::Committed(Committed { claim_handle }));
-            array![].span()
+            // Empty in every case. No note is created and nothing is carried
+            // across time, which is what keeps this clear of the unverified
+            // note lifecycle in HELPER_CUSTODY.md section 1.
+            let none: Array<OpenNoteDeposit> = array![];
+            none.span()
         }
 
         /// Open a commitment. `claim_secret` is deliberately not involved: a
         /// salt published here must never authorise a payout.
         fn reveal(ref self: ContractState, amount: u256, bid_salt: felt252, claim_handle: felt252) {
-            let now = get_block_timestamp();
-            assert(
-                now >= self.close_time.read() && now < self.reveal_deadline.read(),
-                errors::NOT_REVEALING,
-            );
-
-            let mut entry = self.entries.entry(claim_handle).read();
-            assert(entry.bid_commitment != 0, errors::UNKNOWN_ENTRY);
-            assert(!entry.revealed, errors::ALREADY_REVEALED);
-            assert(
-                amount >= self.reserve_price.read() && amount <= self.collateral.read(),
-                errors::AMOUNT_OUT_OF_BOUNDS,
-            );
-
-            let expected = poseidon_hash_span(
-                [amount.low.into(), amount.high.into(), bid_salt, claim_handle].span(),
-            );
-            assert(expected == entry.bid_commitment, errors::BAD_COMMITMENT);
-
-            entry.revealed = true;
-            entry.amount = amount;
-            self.entries.entry(claim_handle).write(entry);
-            self.revealed_count.write(self.revealed_count.read() + 1);
-
-            // Strictly greater, so on a tie the first valid reveal keeps the
-            // win and the tied amount becomes the clearing price.
-            let highest = self.highest_bid.read();
-            if amount > highest {
-                self.second_highest_bid.write(highest);
-                self.highest_bid.write(amount);
-                self.winner_handle.write(claim_handle);
-            } else if amount > self.second_highest_bid.read() {
-                self.second_highest_bid.write(amount);
-            }
-
-            self.emit(Event::Revealed(Revealed { claim_handle, amount }));
+            self.do_reveal(amount, bid_salt, claim_handle);
         }
+
 
         /// Record the outcome. Moves no money, by design: value leaves only
         /// through individual claims, so no single call can run out of gas
@@ -413,35 +438,7 @@ pub mod SealedAuction {
 
         /// Pay out one entry to the address committed inside its handle.
         fn claim(ref self: ContractState, claim_secret: felt252, payout_address: ContractAddress) {
-            assert(self.state.read() == AuctionState::Settled, errors::NOT_SETTLED);
-
-            // The authorisation is the hash, not the caller. Anyone may relay
-            // this transaction; only the committed address can be paid.
-            let handle = poseidon_hash_span([claim_secret, payout_address.into()].span());
-
-            let mut entry = self.entries.entry(handle).read();
-            assert(entry.bid_commitment != 0, errors::NOT_CLAIMABLE);
-            assert(!entry.claimed, errors::ALREADY_CLAIMED);
-            // An unrevealed entry is forfeited to the seller, not refundable.
-            assert(entry.revealed, errors::NOT_CLAIMABLE);
-
-            // Flag written before the transfer, so a reentrant token cannot
-            // re-enter claim and be paid twice on the same entry.
-            entry.claimed = true;
-            self.entries.entry(handle).write(entry);
-
-            let collateral = self.collateral.read();
-            let amount = if handle == self.winner_handle.read() {
-                collateral - self.clearing_price()
-            } else {
-                collateral
-            };
-
-            let ok = IERC20Dispatcher { contract_address: self.token.read() }
-                .transfer(payout_address, amount);
-            assert(ok, errors::TRANSFER_FAILED);
-
-            self.emit(Event::Claimed(Claimed { claim_handle: handle, amount }));
+            self.do_claim(claim_secret, payout_address);
         }
 
         /// Clearing price plus every forfeited collateral, once.
@@ -558,6 +555,82 @@ pub mod SealedAuction {
 
     #[generate_trait]
     impl InternalImpl of InternalTrait {
+        /// The reveal logic, shared by the plain entrypoint and the pool
+        /// path. One copy, so the running top-two update cannot drift
+        /// between them.
+        fn do_reveal(ref self: ContractState, amount: u256, bid_salt: felt252, claim_handle: felt252) {
+            let now = get_block_timestamp();
+            assert(
+                now >= self.close_time.read() && now < self.reveal_deadline.read(),
+                errors::NOT_REVEALING,
+            );
+
+            let mut entry = self.entries.entry(claim_handle).read();
+            assert(entry.bid_commitment != 0, errors::UNKNOWN_ENTRY);
+            assert(!entry.revealed, errors::ALREADY_REVEALED);
+            assert(
+                amount >= self.reserve_price.read() && amount <= self.collateral.read(),
+                errors::AMOUNT_OUT_OF_BOUNDS,
+            );
+
+            let expected = poseidon_hash_span(
+                [amount.low.into(), amount.high.into(), bid_salt, claim_handle].span(),
+            );
+            assert(expected == entry.bid_commitment, errors::BAD_COMMITMENT);
+
+            entry.revealed = true;
+            entry.amount = amount;
+            self.entries.entry(claim_handle).write(entry);
+            self.revealed_count.write(self.revealed_count.read() + 1);
+
+            // Strictly greater, so on a tie the first valid reveal keeps the
+            // win and the tied amount becomes the clearing price.
+            let highest = self.highest_bid.read();
+            if amount > highest {
+                self.second_highest_bid.write(highest);
+                self.highest_bid.write(amount);
+                self.winner_handle.write(claim_handle);
+            } else if amount > self.second_highest_bid.read() {
+                self.second_highest_bid.write(amount);
+            }
+
+            self.emit(Event::Revealed(Revealed { claim_handle, amount }));
+        }
+
+        /// The claim logic, shared by the plain entrypoint and the pool
+        /// path. Pays only the address committed at bid time either way.
+        fn do_claim(ref self: ContractState, claim_secret: felt252, payout_address: ContractAddress) {
+            assert(self.state.read() == AuctionState::Settled, errors::NOT_SETTLED);
+
+            // The authorisation is the hash, not the caller. Anyone may relay
+            // this transaction; only the committed address can be paid.
+            let handle = poseidon_hash_span([claim_secret, payout_address.into()].span());
+
+            let mut entry = self.entries.entry(handle).read();
+            assert(entry.bid_commitment != 0, errors::NOT_CLAIMABLE);
+            assert(!entry.claimed, errors::ALREADY_CLAIMED);
+            // An unrevealed entry is forfeited to the seller, not refundable.
+            assert(entry.revealed, errors::NOT_CLAIMABLE);
+
+            // Flag written before the transfer, so a reentrant token cannot
+            // re-enter claim and be paid twice on the same entry.
+            entry.claimed = true;
+            self.entries.entry(handle).write(entry);
+
+            let collateral = self.collateral.read();
+            let amount = if handle == self.winner_handle.read() {
+                collateral - self.clearing_price()
+            } else {
+                collateral
+            };
+
+            let ok = IERC20Dispatcher { contract_address: self.token.read() }
+                .transfer(payout_address, amount);
+            assert(ok, errors::TRANSFER_FAILED);
+
+            self.emit(Event::Claimed(Claimed { claim_handle: handle, amount }));
+        }
+
         /// Phase and uniqueness checks shared by both commit paths.
         ///
         /// Reusing a handle would overwrite the first bidder's entry and strand
