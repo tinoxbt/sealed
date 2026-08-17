@@ -855,6 +855,36 @@ mod tests {
         auction.privacy_invoke(PoolOperation::Commit, 'commitment', 'handle', 0, 0);
     }
 
+    // Found by an independent review, and the mirror of the commit-side guard.
+    // A zero seller_handle makes claim_proceeds unsatisfiable, so the seller
+    // could never take the clearing price or any forfeited collateral and it
+    // would sit in the contract forever. Only the seller can set it and only
+    // the seller loses, so it is a footgun rather than an attack, but there is
+    // no way back from it once bidders have committed.
+    #[test]
+    fn constructor_rejects_a_zero_seller_handle() {
+        let token_class = declare("MockERC20").unwrap().contract_class();
+        let (token_address, _) = token_class.deploy(@array![]).unwrap();
+
+        let mut calldata: Array<felt252> = array![];
+        let zero_handle: felt252 = 0;
+        zero_handle.serialize(ref calldata);
+        token_address.serialize(ref calldata);
+        POOL().serialize(ref calldata);
+        RESERVE.serialize(ref calldata);
+        COLLATERAL.serialize(ref calldata);
+        CLOSE.serialize(ref calldata);
+        DEADLINE.serialize(ref calldata);
+
+        let auction_class = declare("SealedAuction").unwrap().contract_class();
+        match auction_class.deploy(@calldata) {
+            Result::Ok(_) => panic!("a zero seller handle was accepted"),
+            Result::Err(panic_data) => {
+                assert(*panic_data.at(0) == 'zero claim handle', 'wrong rejection reason');
+            },
+        }
+    }
+
     // Invariant 5, fuzzed. The running top-two update has to be right for
     // reveals arriving in any order, including ties and duplicates.
     #[test]

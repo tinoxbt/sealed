@@ -298,6 +298,13 @@ pub mod SealedAuction {
         close_time: u64,
         reveal_deadline: u64,
     ) {
+        // Same reasoning as the zero guards on commit. claim_proceeds
+        // authorises by recomputing poseidon(seller_secret, payout), and no
+        // caller can produce a preimage hashing to zero, so a zero handle here
+        // means the seller can never be paid and their proceeds sit in the
+        // contract forever. Bidders are unaffected, which is why this is a
+        // footgun rather than an attack, but it has no recovery path.
+        assert(seller_handle != 0, errors::ZERO_HANDLE);
         assert(close_time < reveal_deadline, errors::BAD_DEADLINES);
         // Not merely ordered: far enough apart that revealing is possible.
         assert(
