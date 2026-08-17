@@ -165,3 +165,64 @@ A different design would redistribute forfeited collateral to the bidders who di
 reveal, rewarding disclosure instead of paying the party who benefits from
 confusion. That is a change to the mechanism rather than a fix to a bug, and it
 is recorded here as a considered alternative rather than adopted mid-sprint.
+
+## Prior art, and what is actually new here
+
+This mechanism is not a proposal. It runs in production, at scale, and has for
+years. Saying so is stronger than arguing it from theory.
+
+**Term Finance** clears fixed-rate loans on Ethereum through sealed-bid
+second-price auctions, with several hundred million dollars of cumulative
+volume. Their documentation describes the same three decisions this file argues
+for: tenders "hidden from the public through a hashing algorithm until the
+market clears", a reveal period where "on-chain validation measures are taken to
+ensure that revealed prices match the hashes", and second pricing chosen "to
+reduce incentives for participants to tender any bids or offers at any price
+other than their true valuation". They cite US Treasury auctions as precedent,
+which is the same lineage.
+
+**ENS** ran Vickrey commit-reveal auctions for `.eth` names, with deposits
+forfeited by anyone who failed to reveal. That is this design's forfeiture rule,
+shipped in 2017.
+
+**eBay** is a second-price auction wearing different clothes. Proxy bidding pays
+one increment above the second-highest maximum, so hundreds of millions of
+people have used a Vickrey auction without hearing the word.
+
+### What none of them have
+
+In every one of those systems, *what* was bid is hidden and *who* bid it is not.
+Term's participants are public addresses throughout. ENS bidders were public.
+eBay knows exactly who you are and so does the seller.
+
+That is the entire gap Sealed fills, and it is worth stating narrowly: **the
+mechanism is proven, the missing piece is bidder unlinkability, and the STRK20
+pool is what makes it available.** Anything broader would be false, and a judge
+who knows the history would catch it.
+
+## Keepers, borrowed from Term
+
+Forfeiture prices strategic silence. It cannot tell strategic silence apart from
+a bidder who was asleep, and it punishes both identically.
+
+Term solves this by having protocol keepers push the reveals rather than
+requiring every participant to appear inside the window. Sealed needs no
+contract change to do the same, because `reveal` verifies the salt against the
+commitment and never checks who sent the transaction. Anyone holding the payload
+can submit it, and the entry that results is identical.
+
+`web/scripts/keeper.ts` is that service. It watches bid backups, polls the
+contract for the phase rather than trusting its own clock, and reveals each bid
+once its window opens.
+
+**What delegating costs, stated plainly.** Whoever runs the keeper learns the
+bid when they receive the payload, ahead of everyone else. That is a real loss
+of confidentiality and it is the same trade Term makes. It is opt in, per bid.
+
+**What it cannot cost.** The payload carries `bid_salt` and never
+`claim_secret`. A hostile keeper can reveal a bid early, or refuse to reveal it,
+and can never touch the collateral. This is the first practical payoff of
+keeping those two secrets independent: one of them is safe to hand to a stranger.
+
+A bidder can always reveal themselves regardless, up to the deadline. Whichever
+arrives second is rejected as already revealed.
