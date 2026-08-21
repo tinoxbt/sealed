@@ -15,7 +15,7 @@
 /// client-side route change, because this value is captured at module init.
 /// Auction links are therefore plain anchors, not next/link.
 function resolveAuction(): string {
-  const fallback = process.env.NEXT_PUBLIC_AUCTION_ADDRESS ?? "0x01a691c524299a7cdcde1e49680564fa35a8ac64fdf37c7e71f261e88eb03f62";
+  const fallback = process.env.NEXT_PUBLIC_AUCTION_ADDRESS ?? "0x076a5480f7359b8a8db0245c603c78e108a89442fb3b71aea2a3e7cc976b133d";
   if (typeof window === "undefined") return fallback;
 
   const fromUrl = new URLSearchParams(window.location.search).get("a");
@@ -38,7 +38,7 @@ export const AUCTION_ADDRESS = resolveAuction();
 /// deploys an older contract that looks identical from the outside.
 export const AUCTION_CLASS_HASH =
   process.env.NEXT_PUBLIC_AUCTION_CLASS_HASH ??
-  "0x58f6401bbd486e949d1e42a99a04841d74190416cfe3336b3c1ceb808eda268";
+  "0x0766f2dc9cec51dd1e884dc0e565733f159c3b1b29f2ba16cd4f174fec3f602a";
 
 /// STRK. Same address on Sepolia and mainnet.
 export const TOKEN_ADDRESS =
