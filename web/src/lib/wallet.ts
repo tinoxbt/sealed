@@ -16,6 +16,15 @@ import { AUCTION_ADDRESS, POOL_ADDRESS, SEPOLIA_CHAIN_ID, TOKEN_ADDRESS } from "
 /// PoolOperation enum in auction.cairo, which serialises as its variant index.
 export const PoolOperation = { Commit: "0x0", Reveal: "0x1", Claim: "0x2" } as const;
 
+/// Length of the encrypted backup blob, in felts. Must equal BACKUP_WORDS in
+/// auction.cairo, which rejects any other non-zero length.
+///
+/// Every commit sends a blob of exactly this size, and one that has nothing to
+/// store sends random padding rather than nothing. A blob that is present for
+/// some bidders and absent for others partitions them, which is the same
+/// reasoning that makes the collateral uniform.
+export const BACKUP_WORDS = 12;
+
 /// Dust spent to satisfy the pool's replay protection.
 ///
 /// Every pool transaction must spend at least one matured note. Bidding spends
@@ -28,6 +37,7 @@ export function buildBidActions(
   collateral: bigint,
   bidCommitment: string,
   claimHandle: string,
+  backup: string[],
 ): WALLET_API.STRK20_ACTION[] {
   return [
     {
@@ -39,7 +49,17 @@ export function buildBidActions(
     {
       type: "invoke",
       contract: AUCTION_ADDRESS,
-      calldata: [PoolOperation.Commit, bidCommitment, claimHandle, "0x0", "0x0"],
+      // The trailing array is length-prefixed, so it cannot shift the meaning
+      // of the five fixed slots before it.
+      calldata: [
+        PoolOperation.Commit,
+        bidCommitment,
+        claimHandle,
+        "0x0",
+        "0x0",
+        `0x${backup.length.toString(16)}`,
+        ...backup,
+      ],
     },
   ];
 }
@@ -71,6 +91,7 @@ export function buildRevealActions(
         "0x" + (amount >> 128n).toString(16),
         bidSalt,
         claimHandle,
+        "0x0",
       ],
     },
   ];
@@ -91,7 +112,7 @@ export function buildClaimActions(
     {
       type: "invoke",
       contract: AUCTION_ADDRESS,
-      calldata: [PoolOperation.Claim, claimSecret, payoutAddress, "0x0", "0x0"],
+      calldata: [PoolOperation.Claim, claimSecret, payoutAddress, "0x0", "0x0", "0x0"],
     },
   ];
 }

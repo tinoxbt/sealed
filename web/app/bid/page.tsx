@@ -143,8 +143,14 @@ export default function BidPage() {
       persist(backup);
 
       setBusy("Waiting for the wallet");
+      // Empty, deliberately. The contract accepts an encrypted backup blob
+      // here, but the client-side encryption that would fill it is not built
+      // yet. Sending random padding would make the interface look like it has
+      // a recovery path it does not have, and a bidder who believed that and
+      // deleted their backup file would lose everything. The downloaded file
+      // remains the only copy until the blob is real.
       const res = await w.account.strk20InvokeTransaction(
-        buildBidActions(auction.collateral, toHex(commitment), toHex(handle)),
+        buildBidActions(auction.collateral, toHex(commitment), toHex(handle), []),
       );
 
       // Not skippable, and before the confirmation screen. Losing claim_secret

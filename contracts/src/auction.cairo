@@ -49,6 +49,33 @@
 //! expectation. `fuzz_invariant_8_conservation` asserts both directions: that
 //! payouts never exceed the escrow, and that nothing is left stranded.
 //!
+//! ## The encrypted backup blob
+//!
+//! Each entry may carry an opaque blob, written once at commit and readable by
+//! anyone. The contract performs no cryptography on it and cannot interpret it:
+//! it stores felts and hands them back.
+//!
+//! It exists because the secrets that authorise a reveal and a claim are
+//! generated in the browser and stored nowhere else. A cleared browser or a
+//! lost file makes a bid unrevealable and its collateral unrecoverable. The
+//! client encrypts those secrets under a key it can reproduce, and puts the
+//! ciphertext here, where losing a device cannot destroy it.
+//!
+//! Two properties this contract is responsible for, and only these two:
+//!
+//! 1. **A blob is fixed size or absent.** A variable length would say how much
+//!    the bidder stored, and therefore something about how they stored it. Every
+//!    blob is exactly `BACKUP_WORDS` felts so they are indistinguishable, and
+//!    the client pads with random bytes when it has less to say.
+//! 2. **A blob is written once.** It is set inside the same call that creates
+//!    the entry, and a handle cannot be committed twice, so nothing can
+//!    overwrite another bidder's backup.
+//!
+//! Reading it is deliberately unrestricted. Recovery works by fetching every
+//! blob in an auction and trying to decrypt each one, and only the owner's key
+//! opens the owner's blob. A getter that asked who was calling would defeat
+//! that, and could not be trusted anyway.
+//!
 //! ## External call ordering
 //!
 //! Every state change is written before the ERC20 call that follows it, so a
@@ -138,7 +165,14 @@ pub struct Entry {
 
 #[starknet::interface]
 pub trait ISealedAuction<TContractState> {
-    fn commit(ref self: TContractState, bid_commitment: felt252, claim_handle: felt252);
+    /// `backup` is an opaque ciphertext, either empty or exactly
+    /// `BACKUP_WORDS` felts. The contract never interprets it.
+    fn commit(
+        ref self: TContractState,
+        bid_commitment: felt252,
+        claim_handle: felt252,
+        backup: Span<felt252>,
+    );
     /// Called by the pool. Fixed arity across all three operations so the
     /// calldata shape never depends on the operation, and unused slots must be
     /// zero so a frontend that shifts its arguments reverts instead of
@@ -147,6 +181,10 @@ pub trait ISealedAuction<TContractState> {
     /// Commit  a = bid_commitment  b = claim_handle    c,d = 0
     /// Reveal  a = amount_low      b = amount_high     c = bid_salt  d = claim_handle
     /// Claim   a = claim_secret    b = payout_address  c,d = 0
+    ///
+    /// `backup` trails the fixed five and is length-prefixed, so it cannot
+    /// shift the meaning of anything before it. Only Commit may carry one;
+    /// Reveal and Claim must pass it empty.
     fn privacy_invoke(
         ref self: TContractState,
         operation: PoolOperation,
@@ -154,6 +192,7 @@ pub trait ISealedAuction<TContractState> {
         b: felt252,
         c: felt252,
         d: felt252,
+        backup: Span<felt252>,
     ) -> Span<OpenNoteDeposit>;
     fn reveal(ref self: TContractState, amount: u256, bid_salt: felt252, claim_handle: felt252);
     fn settle(ref self: TContractState);
@@ -179,6 +218,9 @@ pub trait ISealedAuction<TContractState> {
     /// What the winner pays. A bidder needs this before bidding, because it
     /// changes whether shading below your true value is rational.
     fn get_kind(self: @TContractState) -> AuctionKind;
+    /// The stored ciphertext for an entry, or an empty array if it has none.
+    /// Public on purpose: recovery is trial decryption over every blob.
+    fn get_backup(self: @TContractState, claim_handle: felt252) -> Array<felt252>;
 }
 
 #[starknet::contract]
@@ -190,6 +232,16 @@ pub mod SealedAuction {
     use starknet::{ContractAddress, get_block_timestamp, get_caller_address, get_contract_address};
     use super::super::erc20::{IERC20Dispatcher, IERC20DispatcherTrait};
     use super::{AuctionKind, AuctionState, Entry, EntryStatus, OpenNoteDeposit, PoolOperation};
+
+    /// Length of an encrypted backup, in felts. Fixed so every blob looks the
+    /// same on chain.
+    ///
+    /// Sized for the client's payload: three secrets and a payout key, under an
+    /// AEAD nonce and tag, plus several wrapped copies of the data key so that
+    /// more than one thing can open it. The client pads to this length.
+    ///
+    /// Changing it is a redeploy. That is the cost of the uniformity above.
+    pub const BACKUP_WORDS: u32 = 12;
 
     pub mod errors {
         pub const NOT_OPEN: felt252 = 'auction not open';
@@ -210,6 +262,7 @@ pub mod SealedAuction {
         pub const BAD_DEADLINES: felt252 = 'bad deadlines';
         pub const ZERO_COLLATERAL: felt252 = 'zero collateral';
         pub const RESERVE_ABOVE_COLLATERAL: felt252 = 'reserve above collateral';
+        pub const BAD_BACKUP_LENGTH: felt252 = 'bad backup length';
         pub const REVEAL_WINDOW_TOO_SHORT: felt252 = 'reveal window too short';
         pub const NOT_POOL: felt252 = 'caller not pool';
         pub const NOT_RECEIVED: felt252 = 'collateral not received';
@@ -257,6 +310,11 @@ pub mod SealedAuction {
         // unreachable in practice, and a caller cannot forge one because the
         // preimage would have to hash to zero.
         entries: Map<felt252, Entry>,
+        // Keyed by (claim_handle, word index). A Map rather than a Vec because
+        // blobs are per entry, not a single list, and the fixed length means no
+        // separate length needs storing.
+        backups: Map<(felt252, u32), felt252>,
+        has_backup: Map<felt252, bool>,
         commitment_count: u32,
         revealed_count: u32,
         highest_bid: u256,
@@ -385,7 +443,12 @@ pub mod SealedAuction {
         ///
         /// The amount pulled is identical for every bidder, which is what stops
         /// the visible ERC20 leg from leaking the bid.
-        fn commit(ref self: ContractState, bid_commitment: felt252, claim_handle: felt252) {
+        fn commit(
+            ref self: ContractState,
+            bid_commitment: felt252,
+            claim_handle: felt252,
+            backup: Span<felt252>,
+        ) {
             self.assert_can_commit(bid_commitment, claim_handle);
 
             // Recorded before the transfer. A reentrant token calling back
@@ -393,6 +456,7 @@ pub mod SealedAuction {
             // fails the whole transaction reverts, so the entry cannot outlive
             // its collateral.
             self.record_entry(bid_commitment, claim_handle);
+            self.store_backup(claim_handle, backup);
 
             let ok = IERC20Dispatcher { contract_address: self.token.read() }
                 .transfer_from(get_caller_address(), get_contract_address(), self.collateral.read());
@@ -428,6 +492,7 @@ pub mod SealedAuction {
             b: felt252,
             c: felt252,
             d: felt252,
+            backup: Span<felt252>,
         ) -> Span<OpenNoteDeposit> {
             // The only authorisation this entrypoint has. Everything below
             // trusts that the pool performed whatever value movement the
@@ -448,10 +513,16 @@ pub mod SealedAuction {
                     // reverts. An earlier comment here claimed there was
                     // nothing left to reenter. That was wrong.
                     self.record_entry(a, b);
+                    self.store_backup(b, backup);
                     self.take_collateral();
                     self.emit(Event::Committed(Committed { claim_handle: b }));
                 },
                 PoolOperation::Reveal => {
+                    // A backup belongs to the entry, and the entry already
+                    // exists by now. Accepting one here would either be ignored
+                    // silently or overwrite what commit stored, so refuse it
+                    // for the same reason c and d must be zero above.
+                    assert(backup.len() == 0, errors::UNUSED_ARGS);
                     // No value moves here. The pool carries the call only, so
                     // the bidder never appears as a transaction sender.
                     let amount = u256 {
@@ -461,7 +532,7 @@ pub mod SealedAuction {
                     self.do_reveal(amount, c, d);
                 },
                 PoolOperation::Claim => {
-                    assert(c == 0 && d == 0, errors::UNUSED_ARGS);
+                    assert(c == 0 && d == 0 && backup.len() == 0, errors::UNUSED_ARGS);
                     let payout: ContractAddress = b.try_into().expect('bad payout address');
                     self.do_claim(a, payout);
                 },
@@ -616,6 +687,19 @@ pub mod SealedAuction {
             self.reserve_price.read()
         }
 
+        fn get_backup(self: @ContractState, claim_handle: felt252) -> Array<felt252> {
+            let mut out = array![];
+            if !self.has_backup.entry(claim_handle).read() {
+                return out;
+            }
+            let mut i: u32 = 0;
+            while i < BACKUP_WORDS {
+                out.append(self.backups.entry((claim_handle, i)).read());
+                i += 1;
+            };
+            out
+        }
+
         fn get_kind(self: @ContractState) -> AuctionKind {
             self.kind.read()
         }
@@ -741,6 +825,27 @@ pub mod SealedAuction {
 
         /// Record the entry. Identical for both paths, so a reveal or a claim
         /// cannot tell which one funded it.
+        /// Store the blob, or accept its absence.
+        ///
+        /// Called only from the two commit paths, immediately after the entry
+        /// is recorded. A handle cannot be committed twice, so this can never
+        /// overwrite an existing blob.
+        fn store_backup(ref self: ContractState, claim_handle: felt252, backup: Span<felt252>) {
+            let len = backup.len();
+            if len == 0 {
+                return;
+            }
+            // Any other length would make blobs distinguishable from each other.
+            assert(len == BACKUP_WORDS, errors::BAD_BACKUP_LENGTH);
+
+            let mut i: u32 = 0;
+            while i < len {
+                self.backups.entry((claim_handle, i)).write(*backup.at(i));
+                i += 1;
+            };
+            self.has_backup.entry(claim_handle).write(true);
+        }
+
         fn record_entry(ref self: ContractState, bid_commitment: felt252, claim_handle: felt252) {
             self
                 .entries

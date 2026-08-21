@@ -99,7 +99,7 @@ mod tests {
     ) -> felt252 {
         let h = handle(secret, payout);
         start_cheat_caller_address(auction.contract_address, bidder);
-        auction.commit(commitment(amount, salt, h), h);
+        auction.commit(commitment(amount, salt, h), h, array![].span());
         stop_cheat_caller_address(auction.contract_address);
         h
     }
@@ -543,7 +543,7 @@ mod tests {
         let ch = handle(secret, payout);
         let commitment = commitment(bid, salt, ch);
         start_cheat_caller_address(auction.contract_address, POOL());
-        auction.privacy_invoke(PoolOperation::Commit, commitment, ch, 0, 0);
+        auction.privacy_invoke(PoolOperation::Commit, commitment, ch, 0, 0, array![].span());
         stop_cheat_caller_address(auction.contract_address);
         ch
     }
@@ -558,7 +558,7 @@ mod tests {
 
         token.mint(auction_address, COLLATERAL);
         start_cheat_caller_address(auction.contract_address, b1);
-        auction.privacy_invoke(PoolOperation::Commit, 'commitment', 'handle', 0, 0);
+        auction.privacy_invoke(PoolOperation::Commit, 'commitment', 'handle', 0, 0, array![].span());
     }
 
     // The heart of it. The pool delivers less than the collateral, so the entry
@@ -584,7 +584,7 @@ mod tests {
 
         let ch = handle('sec1', addr('p1'));
         start_cheat_caller_address(auction.contract_address, POOL());
-        auction.privacy_invoke(PoolOperation::Commit, 'commitment', ch, 0, 0);
+        auction.privacy_invoke(PoolOperation::Commit, 'commitment', ch, 0, 0, array![].span());
     }
 
     // A second invoke cannot ride on the first one's collateral. escrowed has
@@ -599,7 +599,7 @@ mod tests {
 
         let ch2 = handle('sec2', addr('p2'));
         start_cheat_caller_address(auction.contract_address, POOL());
-        auction.privacy_invoke(PoolOperation::Commit, 'commitment2', ch2, 0, 0);
+        auction.privacy_invoke(PoolOperation::Commit, 'commitment2', ch2, 0, 0, array![].span());
     }
 
     // Phase rules apply identically to both paths.
@@ -686,7 +686,7 @@ mod tests {
         start_cheat_block_timestamp_global(CLOSE + 1);
         start_cheat_caller_address(address, POOL());
         // amount_low, amount_high, salt, handle
-        auction.privacy_invoke(PoolOperation::Reveal, 500, 0, 'salt1', h);
+        auction.privacy_invoke(PoolOperation::Reveal, 500, 0, 'salt1', h, array![].span());
         stop_cheat_caller_address(address);
 
         assert(auction.get_revealed_count() == 1, 'revealed via pool');
@@ -702,7 +702,7 @@ mod tests {
         let h = do_commit(auction, b1, 500, 'salt1', 'sec1', addr('p1'));
 
         start_cheat_block_timestamp_global(CLOSE + 1);
-        auction.privacy_invoke(PoolOperation::Reveal, 500, 0, 'salt1', h);
+        auction.privacy_invoke(PoolOperation::Reveal, 500, 0, 'salt1', h, array![].span());
     }
 
     // A wrong salt fails identically through the pool. The commitment check is
@@ -716,7 +716,7 @@ mod tests {
 
         start_cheat_block_timestamp_global(CLOSE + 1);
         start_cheat_caller_address(address, POOL());
-        auction.privacy_invoke(PoolOperation::Reveal, 500, 0, 'wrong_salt', h);
+        auction.privacy_invoke(PoolOperation::Reveal, 500, 0, 'wrong_salt', h, array![].span());
     }
 
     // The pool-routed claim. Pays the address committed at bid time, exactly as
@@ -733,7 +733,7 @@ mod tests {
         auction.settle();
 
         start_cheat_caller_address(address, POOL());
-        auction.privacy_invoke(PoolOperation::Claim, 'sec1', addr('p1').into(), 0, 0);
+        auction.privacy_invoke(PoolOperation::Claim, 'sec1', addr('p1').into(), 0, 0, array![].span());
         stop_cheat_caller_address(address);
 
         // Sole bidder, so the clearing price is the reserve.
@@ -757,7 +757,7 @@ mod tests {
         start_cheat_caller_address(address, POOL());
         // Correct secret, attacker's address. The recomputed handle differs, so
         // there is no such entry.
-        auction.privacy_invoke(PoolOperation::Claim, 'sec1', addr('attacker').into(), 0, 0);
+        auction.privacy_invoke(PoolOperation::Claim, 'sec1', addr('attacker').into(), 0, 0, array![].span());
     }
 
     // Unused calldata slots must be zero, so a frontend that shifts its
@@ -769,7 +769,7 @@ mod tests {
         let (auction, _, address) = setup(array![b1].span());
 
         start_cheat_caller_address(address, POOL());
-        auction.privacy_invoke(PoolOperation::Commit, 'commitment', 'handle', 7, 0);
+        auction.privacy_invoke(PoolOperation::Commit, 'commitment', 'handle', 7, 0, array![].span());
     }
 
     // Found by an independent review. Zero is this contract's sentinel for both
@@ -788,7 +788,7 @@ mod tests {
         let (auction, _, _) = setup(array![b1].span());
 
         start_cheat_caller_address(auction.contract_address, b1);
-        auction.commit('commitment', 0);
+        auction.commit('commitment', 0, array![].span());
     }
 
     // A zero bid_commitment reads as "no entry here", so the same handle could
@@ -801,7 +801,7 @@ mod tests {
         let (auction, _, _) = setup(array![b1].span());
 
         start_cheat_caller_address(auction.contract_address, b1);
-        auction.commit(0, 'handle');
+        auction.commit(0, 'handle', array![].span());
     }
 
     // Both guards apply to the pool path too, which is where a hostile
@@ -813,7 +813,7 @@ mod tests {
         let (auction, _, address) = setup(array![b1].span());
 
         start_cheat_caller_address(address, POOL());
-        auction.privacy_invoke(PoolOperation::Commit, 'commitment', 0, 0, 0);
+        auction.privacy_invoke(PoolOperation::Commit, 'commitment', 0, 0, 0, array![].span());
     }
 
     #[test]
@@ -823,7 +823,7 @@ mod tests {
         let (auction, _, address) = setup(array![b1].span());
 
         start_cheat_caller_address(address, POOL());
-        auction.privacy_invoke(PoolOperation::Commit, 0, 'handle', 0, 0);
+        auction.privacy_invoke(PoolOperation::Commit, 0, 'handle', 0, 0, array![].span());
     }
 
     // Found by an independent review. take_collateral reads balance_of, which
@@ -862,7 +862,7 @@ mod tests {
 
         start_cheat_block_timestamp_global(CLOSE - 1);
         start_cheat_caller_address(auction_address, POOL());
-        auction.privacy_invoke(PoolOperation::Commit, 'commitment', 'handle', 0, 0);
+        auction.privacy_invoke(PoolOperation::Commit, 'commitment', 'handle', 0, 0, array![].span());
     }
 
     // Found by an independent review, and the mirror of the commit-side guard.
@@ -1001,6 +1001,104 @@ mod tests {
 
         assert(auction.get_clearing_price() == 700, 'not the reserve');
         assert(auction.get_kind() == AuctionKind::FirstPrice, 'kind reported');
+    }
+
+    // A blob of exactly BACKUP_WORDS felts, distinguishable from padding so a
+    // test can tell it round-tripped rather than reading zeros back.
+    fn sample_backup() -> Array<felt252> {
+        array![101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112]
+    }
+
+    #[test]
+    fn backup_round_trips_through_commit() {
+        let b1 = addr('b1');
+        let (auction, _, _) = setup(array![b1].span());
+        let h = handle('sec1', addr('p1'));
+
+        start_cheat_caller_address(auction.contract_address, b1);
+        auction.commit(commitment(500, 'salt1', h), h, sample_backup().span());
+        stop_cheat_caller_address(auction.contract_address);
+
+        let stored = auction.get_backup(h);
+        assert(stored.len() == 12, 'wrong length back');
+        assert(*stored.at(0) == 101, 'first word wrong');
+        assert(*stored.at(11) == 112, 'last word wrong');
+    }
+
+    // The pool-driven path must store an identical blob, or a bidder's recovery
+    // would depend on which route they bid through.
+    #[test]
+    fn backup_round_trips_through_the_pool() {
+        let (auction, token, _) = setup(array![].span());
+        let h = handle('sec1', addr('p1'));
+        token.mint(auction.contract_address, COLLATERAL);
+
+        start_cheat_caller_address(auction.contract_address, POOL());
+        auction
+            .privacy_invoke(
+                PoolOperation::Commit, commitment(500, 'salt1', h), h, 0, 0,
+                sample_backup().span(),
+            );
+        stop_cheat_caller_address(auction.contract_address);
+
+        let stored = auction.get_backup(h);
+        assert(stored.len() == 12, 'pool path length');
+        assert(*stored.at(5) == 106, 'pool path content');
+    }
+
+    // Any length but the fixed one would make blobs distinguishable, which is
+    // the whole reason the size is fixed.
+    #[test]
+    #[should_panic(expected: 'bad backup length')]
+    fn backup_of_wrong_length_rejected() {
+        let b1 = addr('b1');
+        let (auction, _, _) = setup(array![b1].span());
+        let h = handle('sec1', addr('p1'));
+
+        start_cheat_caller_address(auction.contract_address, b1);
+        auction.commit(commitment(500, 'salt1', h), h, array![1, 2, 3].span());
+    }
+
+    #[test]
+    fn entry_without_a_backup_reads_empty() {
+        let b1 = addr('b1');
+        let (auction, _, _) = setup(array![b1].span());
+        let h = do_commit(auction, b1, 500, 'salt1', 'sec1', addr('p1'));
+        assert(auction.get_backup(h).len() == 0, 'should be empty');
+    }
+
+    #[test]
+    fn unknown_handle_reads_empty() {
+        let (auction, _, _) = setup(array![].span());
+        assert(auction.get_backup('never_committed').len() == 0, 'should be empty');
+    }
+
+    // A blob belongs to the entry and the entry already exists by reveal time.
+    // Accepting one would either be silently dropped or overwrite the original.
+    #[test]
+    #[should_panic(expected: 'unused args must be zero')]
+    fn reveal_through_the_pool_refuses_a_backup() {
+        let b1 = addr('b1');
+        let (auction, _, _) = setup(array![b1].span());
+        let h = do_commit(auction, b1, 500, 'salt1', 'sec1', addr('p1'));
+
+        start_cheat_block_timestamp_global(CLOSE + 1);
+        start_cheat_caller_address(auction.contract_address, POOL());
+        auction.privacy_invoke(PoolOperation::Reveal, 500, 0, 'salt1', h, sample_backup().span());
+    }
+
+    #[test]
+    #[should_panic(expected: 'unused args must be zero')]
+    fn claim_through_the_pool_refuses_a_backup() {
+        let b1 = addr('b1');
+        let (auction, _, _) = setup(array![b1].span());
+        do_commit(auction, b1, 500, 'salt1', 'sec1', addr('p1'));
+
+        start_cheat_caller_address(auction.contract_address, POOL());
+        auction
+            .privacy_invoke(
+                PoolOperation::Claim, 'sec1', addr('p1').into(), 0, 0, sample_backup().span(),
+            );
     }
 
     // Invariant 5, fuzzed. The running top-two update has to be right for

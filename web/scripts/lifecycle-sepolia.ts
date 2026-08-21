@@ -143,7 +143,7 @@ async function main() {
   await provider.waitForTransaction(appr.transaction_hash);
 
   for (const b of bidders) {
-    await call("commit", [hex(b.commitment), hex(b.handle)]);
+    await call("commit", [hex(b.commitment), hex(b.handle), "0x0"]);
     log(`committed ${b.name}`);
   }
 
