@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { readAuction, type AuctionSummary } from "../src/lib/auction";
 import { AuctionList } from "../src/components/AuctionList";
-import { AuctionStatus } from "../src/components/AuctionStatus";
+import { AuctionDetail } from "../src/components/AuctionDetail";
 import { WalletBar } from "../src/components/WalletBar";
 import { forceDownload, persist, type BidBackup } from "../src/lib/backup";
 import { bidCommitment, claimHandle } from "../src/commitment";
@@ -263,7 +263,7 @@ export default function BidPage() {
             </div>
           )}
 
-          {auction && <AuctionStatus a={auction} />}
+          {auction && <AuctionDetail address={AUCTION_ADDRESS} a={auction} />}
 
           <div className="flex items-end gap-3">
             <label className="flex-1 space-y-1">

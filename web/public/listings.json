@@ -1,0 +1,11 @@
+{
+  "_comment": "Human-readable metadata for auctions, keyed by contract address. Purely public information about a public contract: no bidder, no secret, and nothing the chain does not already show. Served as a static file so there is no server that could learn who is looking at what. To list an auction, open a pull request adding an entry.",
+  "listings": {
+    "0x076a5480f7359b8a8db0245c603c78e108a89442fb3b71aea2a3e7cc976b133d": {
+      "title": "Sealed demo auction",
+      "description": "A live Sepolia auction used to demonstrate the full lifecycle: bid through the privacy pool, reveal, settle at the second-highest price, and claim to an address committed before bidding.",
+      "seller": "Sealed",
+      "itemKind": "Demonstration"
+    }
+  }
+}

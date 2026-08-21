@@ -20,8 +20,11 @@ export type AuctionStateName = (typeof AUCTION_STATE)[number];
 /// and showing "open" then would invite bids that revert.
 export type Phase = "Bidding" | "Revealing" | "AwaitingSettlement" | "Settled" | "Cancelled";
 
+export type AuctionKindName = "Vickrey" | "FirstPrice";
+
 export type AuctionSummary = {
   state: AuctionStateName;
+  kind: AuctionKindName;
   phase: Phase;
   collateral: bigint;
   reserve: bigint;
@@ -35,8 +38,9 @@ export type AuctionSummary = {
 };
 
 export async function readAuction(): Promise<AuctionSummary> {
-  const [st, coll, res, esc, cnt, rev, clear, win, timing] = await Promise.all([
+  const [st, kind, coll, res, esc, cnt, rev, clear, win, timing] = await Promise.all([
     view("get_state"),
+    view("get_kind"),
     view("get_collateral"),
     view("get_reserve_price"),
     view("get_escrowed"),
@@ -65,6 +69,7 @@ export async function readAuction(): Promise<AuctionSummary> {
 
   return {
     state,
+    kind: Number(BigInt(kind[0])) === 1 ? "FirstPrice" : "Vickrey",
     phase,
     collateral: u256(coll),
     reserve: u256(res),

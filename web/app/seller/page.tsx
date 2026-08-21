@@ -11,7 +11,8 @@ import {
 } from "../../src/lib/auction";
 import { formatStrk } from "../../src/lib/secrets";
 import { useWallet } from "../../src/lib/useWallet";
-import { AuctionStatus } from "../../src/components/AuctionStatus";
+import { AuctionDetail } from "../../src/components/AuctionDetail";
+import { AUCTION_ADDRESS } from "../../src/lib/config";
 import { WalletBar } from "../../src/components/WalletBar";
 
 export default function SellerPage() {
@@ -74,7 +75,7 @@ export default function SellerPage() {
         </p>
       )}
 
-      {auction && <AuctionStatus a={auction} />}
+      {auction && <AuctionDetail address={AUCTION_ADDRESS} a={auction} />}
 
       <WalletBar {...w} connect={w.connect} />
 
