@@ -47,3 +47,6 @@ next-env.d.ts
 # The bid page downloads them to wherever the browser puts downloads, which
 # can be the repository root.
 sealed-bid-*.json
+
+# TypeScript incremental build state
+*.tsbuildinfo
