@@ -14,7 +14,7 @@ mod tests {
     use starknet::ContractAddress;
     use super::super::auction::{
         AuctionState, EntryStatus, ISealedAuctionDispatcher, ISealedAuctionDispatcherTrait,
-        PoolOperation, SealedAuction,
+        AuctionKind, PoolOperation, SealedAuction,
     };
     use super::super::mock_erc20::{
         IMockERC20Dispatcher, IMockERC20DispatcherTrait, IReentrantTokenDispatcher,
@@ -50,6 +50,12 @@ mod tests {
     fn setup(
         bidders: Span<ContractAddress>,
     ) -> (ISealedAuctionDispatcher, IMockERC20Dispatcher, ContractAddress) {
+        setup_kind(bidders, AuctionKind::Vickrey)
+    }
+
+    fn setup_kind(
+        bidders: Span<ContractAddress>, kind: AuctionKind,
+    ) -> (ISealedAuctionDispatcher, IMockERC20Dispatcher, ContractAddress) {
         let token_class = declare("MockERC20").unwrap().contract_class();
         let (token_address, _) = token_class.deploy(@array![]).unwrap();
         let token = IMockERC20Dispatcher { contract_address: token_address };
@@ -64,6 +70,7 @@ mod tests {
         COLLATERAL.serialize(ref calldata);
         CLOSE.serialize(ref calldata);
         DEADLINE.serialize(ref calldata);
+        kind.serialize(ref calldata);
 
         let auction_class = declare("SealedAuction").unwrap().contract_class();
         let (auction_address, _) = auction_class.deploy(@calldata).unwrap();
@@ -378,6 +385,7 @@ mod tests {
         CLOSE.serialize(ref calldata);
         // One second to reveal. Ordered correctly, and still unmeetable.
         (CLOSE + 1).serialize(ref calldata);
+        AuctionKind::Vickrey.serialize(ref calldata);
 
         // Matched rather than unwrapped: unwrap replaces the constructor's
         // panic with its own, so should_panic would have accepted any deploy
@@ -405,6 +413,7 @@ mod tests {
         COLLATERAL.serialize(ref calldata);
         CLOSE.serialize(ref calldata);
         (CLOSE + 600).serialize(ref calldata);
+        AuctionKind::Vickrey.serialize(ref calldata);
 
         let auction_class = declare("SealedAuction").unwrap().contract_class();
         let (address, _) = auction_class.deploy(@calldata).unwrap();
@@ -842,6 +851,7 @@ mod tests {
         COLLATERAL.serialize(ref calldata);
         CLOSE.serialize(ref calldata);
         DEADLINE.serialize(ref calldata);
+        AuctionKind::Vickrey.serialize(ref calldata);
 
         let auction_class = declare("SealedAuction").unwrap().contract_class();
         let (auction_address, _) = auction_class.deploy(@calldata).unwrap();
@@ -875,6 +885,7 @@ mod tests {
         COLLATERAL.serialize(ref calldata);
         CLOSE.serialize(ref calldata);
         DEADLINE.serialize(ref calldata);
+        AuctionKind::Vickrey.serialize(ref calldata);
 
         let auction_class = declare("SealedAuction").unwrap().contract_class();
         match auction_class.deploy(@calldata) {
@@ -903,6 +914,7 @@ mod tests {
         COLLATERAL.serialize(ref calldata);
         CLOSE.serialize(ref calldata);
         DEADLINE.serialize(ref calldata);
+        AuctionKind::Vickrey.serialize(ref calldata);
 
         let mut spy = spy_events();
         let auction_class = declare("SealedAuction").unwrap().contract_class();
@@ -925,6 +937,70 @@ mod tests {
                     ),
                 ],
             );
+    }
+
+    // RFP-08 names first-price alongside Vickrey. The two differ in exactly one
+    // number, so they share a contract.
+    #[test]
+    fn first_price_winner_pays_their_own_bid() {
+        let b1 = addr('b1');
+        let b2 = addr('b2');
+        let (auction, token, address) = setup_kind(array![b1, b2].span(), AuctionKind::FirstPrice);
+
+        let h1 = do_commit(auction, b1, 800, 'salt1', 'sec1', addr('p1'));
+        do_commit(auction, b2, 500, 'salt2', 'sec2', addr('p2'));
+
+        start_cheat_block_timestamp_global(CLOSE + 1);
+        auction.reveal(800, 'salt1', h1);
+        auction.reveal(500, 'salt2', handle('sec2', addr('p2')));
+        start_cheat_block_timestamp_global(DEADLINE + 1);
+        auction.settle();
+
+        // The whole difference: 800 rather than the runner-up's 500.
+        assert(auction.get_clearing_price() == 800, 'pays own bid');
+
+        auction.claim('sec1', addr('p1'));
+        assert(token.balance_of(addr('p1')) == COLLATERAL - 800, 'winner refunded the rest');
+        auction.claim('sec2', addr('p2'));
+        assert(token.balance_of(addr('p2')) == COLLATERAL, 'loser refunded in full');
+        assert(address == address, 'address used');
+    }
+
+    // The same auction under the default rule, so the difference is the kind
+    // and nothing else.
+    #[test]
+    fn vickrey_winner_pays_the_runner_up() {
+        let b1 = addr('b1');
+        let b2 = addr('b2');
+        let (auction, _, _) = setup(array![b1, b2].span());
+
+        let h1 = do_commit(auction, b1, 800, 'salt1', 'sec1', addr('p1'));
+        do_commit(auction, b2, 500, 'salt2', 'sec2', addr('p2'));
+
+        start_cheat_block_timestamp_global(CLOSE + 1);
+        auction.reveal(800, 'salt1', h1);
+        auction.reveal(500, 'salt2', handle('sec2', addr('p2')));
+        start_cheat_block_timestamp_global(DEADLINE + 1);
+        auction.settle();
+
+        assert(auction.get_clearing_price() == 500, 'pays the runner up');
+    }
+
+    // A sole bidder under first-price pays their bid, not the reserve. Under
+    // Vickrey they pay the reserve, and that difference is easy to get wrong.
+    #[test]
+    fn first_price_sole_bidder_pays_their_bid() {
+        let b1 = addr('b1');
+        let (auction, _, _) = setup_kind(array![b1].span(), AuctionKind::FirstPrice);
+        let h1 = do_commit(auction, b1, 700, 'salt1', 'sec1', addr('p1'));
+
+        start_cheat_block_timestamp_global(CLOSE + 1);
+        auction.reveal(700, 'salt1', h1);
+        start_cheat_block_timestamp_global(DEADLINE + 1);
+        auction.settle();
+
+        assert(auction.get_clearing_price() == 700, 'not the reserve');
+        assert(auction.get_kind() == AuctionKind::FirstPrice, 'kind reported');
     }
 
     // Invariant 5, fuzzed. The running top-two update has to be right for

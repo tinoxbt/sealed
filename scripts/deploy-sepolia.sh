@@ -31,6 +31,9 @@ NOW=$(date +%s)
 CLOSE="${SEALED_CLOSE:-$((NOW + 3600))}"      # bidding open 1 hour
 DEADLINE="${SEALED_DEADLINE:-$((NOW + 7200))}" # reveal window 1 hour after that
 
+# 0 Vickrey, the winner pays the runner-up. 1 first-price, they pay their own bid.
+SEALED_KIND="${SEALED_KIND:-0}"
+
 if [ -z "${SEALED_SELLER_HANDLE:-}" ]; then
   echo "SEALED_SELLER_HANDLE is not set." >&2
   echo "" >&2
@@ -66,7 +69,8 @@ sncast --account "$ACCOUNT" deploy \
     "$RESERVE_LOW" 0 \
     "$COLLATERAL_LOW" 0 \
     "$CLOSE" \
-    "$DEADLINE"
+    "$DEADLINE" \
+    "${SEALED_KIND:-0}"
 
 echo ""
 echo "close_time    $CLOSE"

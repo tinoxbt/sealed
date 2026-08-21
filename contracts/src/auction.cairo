@@ -86,6 +86,25 @@ pub enum EntryStatus {
     Claimed,
 }
 
+/// What the winner pays.
+///
+/// RFP-08 names first-price, Vickrey and multi-unit. The first two differ only
+/// in this one number, so they share a contract. Multi-unit does not: it breaks
+/// the single-winner assumption that most of the invariants rest on, and is out
+/// of scope.
+///
+/// Serialises as its variant index: Vickrey 0, FirstPrice 1.
+#[derive(Drop, Serde, Copy, PartialEq, starknet::Store)]
+pub enum AuctionKind {
+    /// Second-price. The winner pays the runner-up's bid, so bidding your true
+    /// value is the dominant strategy.
+    #[default]
+    Vickrey,
+    /// The winner pays their own bid. Simpler to explain, and it gives bidders
+    /// a reason to shade below their true value.
+    FirstPrice,
+}
+
 /// Which auction operation a pool-driven call is performing.
 ///
 /// The pool always dispatches to `selector!("privacy_invoke")` and the wallet's
@@ -157,6 +176,9 @@ pub trait ISealedAuction<TContractState> {
     /// deciding which phase the auction is in needs both, and two round trips
     /// can straddle a phase change and produce a state that never existed.
     fn get_timing(self: @TContractState) -> (u64, u64);
+    /// What the winner pays. A bidder needs this before bidding, because it
+    /// changes whether shading below your true value is rational.
+    fn get_kind(self: @TContractState) -> AuctionKind;
 }
 
 #[starknet::contract]
@@ -167,7 +189,7 @@ pub mod SealedAuction {
     };
     use starknet::{ContractAddress, get_block_timestamp, get_caller_address, get_contract_address};
     use super::super::erc20::{IERC20Dispatcher, IERC20DispatcherTrait};
-    use super::{AuctionState, Entry, EntryStatus, OpenNoteDeposit, PoolOperation};
+    use super::{AuctionKind, AuctionState, Entry, EntryStatus, OpenNoteDeposit, PoolOperation};
 
     pub mod errors {
         pub const NOT_OPEN: felt252 = 'auction not open';
@@ -226,6 +248,7 @@ pub mod SealedAuction {
         collateral: u256,
         close_time: u64,
         reveal_deadline: u64,
+        kind: AuctionKind,
         state: AuctionState,
         // Keyed by claim_handle. Never by address.
         //
@@ -317,6 +340,7 @@ pub mod SealedAuction {
         collateral: u256,
         close_time: u64,
         reveal_deadline: u64,
+        kind: AuctionKind,
     ) {
         // Same reasoning as the zero guards on commit. claim_proceeds
         // authorises by recomputing poseidon(seller_secret, payout), and no
@@ -343,6 +367,7 @@ pub mod SealedAuction {
         self.close_time.write(close_time);
         self.reveal_deadline.write(reveal_deadline);
         self.state.write(AuctionState::Open);
+        self.kind.write(kind);
 
         self
             .emit(
@@ -591,6 +616,10 @@ pub mod SealedAuction {
             self.reserve_price.read()
         }
 
+        fn get_kind(self: @ContractState) -> AuctionKind {
+            self.kind.read()
+        }
+
         fn get_timing(self: @ContractState) -> (u64, u64) {
             (self.close_time.read(), self.reveal_deadline.read())
         }
@@ -747,12 +776,21 @@ pub mod SealedAuction {
             if self.winner_handle.read() == 0 {
                 return 0;
             }
-            let second = self.second_highest_bid.read();
-            let reserve = self.reserve_price.read();
-            if second > reserve {
-                second
-            } else {
-                reserve
+            match self.kind.read() {
+                // The winner pays their own bid. A reveal is rejected below the
+                // reserve, so this is never under it.
+                AuctionKind::FirstPrice => self.highest_bid.read(),
+                // The runner-up's bid, or the reserve when there was only one
+                // valid reveal and the runner-up does not exist.
+                AuctionKind::Vickrey => {
+                    let second = self.second_highest_bid.read();
+                    let reserve = self.reserve_price.read();
+                    if second > reserve {
+                        second
+                    } else {
+                        reserve
+                    }
+                },
             }
         }
     }

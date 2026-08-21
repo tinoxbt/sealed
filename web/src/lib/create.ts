@@ -20,6 +20,9 @@ export type SellerBackup = {
   accountClassHash: string;
   reserveStrk: string;
   collateralStrk: string;
+  /// Recorded so the rule is legible from the backup alone, without
+  /// having to read it back off the contract.
+  kind: "vickrey" | "first-price";
   closeTime: number;
   revealDeadline: number;
 };
@@ -29,7 +32,13 @@ export type SellerBackup = {
 /// here so the form can say so before a transaction is spent finding out.
 export const MIN_REVEAL_WINDOW_SECONDS = 600;
 
+/// Matches the AuctionKind enum in auction.cairo, which serialises as its
+/// variant index.
+export const AuctionKind = { Vickrey: "0x0", FirstPrice: "0x1" } as const;
+export type AuctionKindValue = (typeof AuctionKind)[keyof typeof AuctionKind];
+
 export type AuctionParams = {
+  kind: AuctionKindValue;
   reserve: bigint;
   collateral: bigint;
   closeTime: number;
@@ -66,6 +75,7 @@ export function prepare(p: AuctionParams) {
     { low: "0x" + (p.collateral & ((1n << 128n) - 1n)).toString(16), high: "0x" + (p.collateral >> 128n).toString(16) },
     String(p.closeTime),
     String(p.revealDeadline),
+    p.kind,
   ]);
 
   return { sellerSecret, payout, handle, constructorCalldata, classHash: AUCTION_CLASS_HASH };

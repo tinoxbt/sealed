@@ -3,7 +3,14 @@
 import Link from "next/link";
 import { useState } from "react";
 import { forceDownloadSeller } from "../../src/lib/backup";
-import { MIN_REVEAL_WINDOW_SECONDS, prepare, validate, type SellerBackup } from "../../src/lib/create";
+import {
+  AuctionKind,
+  MIN_REVEAL_WINDOW_SECONDS,
+  prepare,
+  validate,
+  type AuctionKindValue,
+  type SellerBackup,
+} from "../../src/lib/create";
 import { formatStrk, parseStrk, toHex } from "../../src/lib/secrets";
 import { useWallet } from "../../src/lib/useWallet";
 import { WalletBar } from "../../src/components/WalletBar";
@@ -16,6 +23,7 @@ export default function CreatePage() {
   const [collateral, setCollateral] = useState("1");
   const [openHours, setOpenHours] = useState("24");
   const [revealHours, setRevealHours] = useState("24");
+  const [kind, setKind] = useState<AuctionKindValue>(AuctionKind.Vickrey);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [created, setCreated] = useState<Created | null>(null);
@@ -29,6 +37,7 @@ export default function CreatePage() {
       const now = Math.floor(Date.now() / 1000);
       const closeTime = now + Math.round(parseFloat(openHours) * 3600);
       params = {
+        kind,
         reserve: parseStrk(reserve),
         collateral: parseStrk(collateral),
         closeTime,
@@ -71,6 +80,7 @@ export default function CreatePage() {
         accountClassHash: (await import("../../src/lib/config")).ACCOUNT_CLASS_HASH,
         reserveStrk: reserve,
         collateralStrk: collateral,
+        kind: kind === AuctionKind.FirstPrice ? "first-price" : "vickrey",
         closeTime: params.closeTime,
         revealDeadline: params.revealDeadline,
       };
@@ -142,6 +152,40 @@ export default function CreatePage() {
           onChange={setReserve}
           hint="The lowest bid you will accept, and the clearing price if only one bidder reveals. Cannot exceed the collateral."
         />
+        <fieldset className="space-y-2">
+          <legend className="text-sm text-neutral-400">What the winner pays</legend>
+          <label className="flex gap-3 items-start">
+            <input
+              type="radio"
+              className="mt-1"
+              checked={kind === AuctionKind.Vickrey}
+              onChange={() => setKind(AuctionKind.Vickrey)}
+            />
+            <span className="text-sm">
+              <span className="block">Second-price (Vickrey)</span>
+              <span className="block text-neutral-500">
+                The winner pays the runner-up's bid. Bidding your true value is the best
+                strategy, so bids tend to be honest. This is the default.
+              </span>
+            </span>
+          </label>
+          <label className="flex gap-3 items-start">
+            <input
+              type="radio"
+              className="mt-1"
+              checked={kind === AuctionKind.FirstPrice}
+              onChange={() => setKind(AuctionKind.FirstPrice)}
+            />
+            <span className="text-sm">
+              <span className="block">First-price</span>
+              <span className="block text-neutral-500">
+                The winner pays their own bid. Easier to explain, but bidders have a reason
+                to bid below what the item is worth to them.
+              </span>
+            </span>
+          </label>
+        </fieldset>
+
         <Field label="Bidding stays open for, in hours" value={openHours} onChange={setOpenHours} />
         <Field
           label="Reveal window, in hours"

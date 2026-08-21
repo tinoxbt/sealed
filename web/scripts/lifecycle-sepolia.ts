@@ -91,6 +91,7 @@ async function main() {
       lo(RESERVE), hi(RESERVE),
       lo(COLLATERAL), hi(COLLATERAL),
       String(close), String(deadline),
+      "0x0", // Vickrey
     ],
   });
   await provider.waitForTransaction(deployTx);
