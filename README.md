@@ -61,10 +61,10 @@ Sealed is what could be deployed in August.
 ### Their three objections to commit-reveal, answered
 
 **"Bidders grief by not revealing."** Forfeiture makes silence cost the entire
-collateral, so it is priced rather than free. Term Finance clears hundreds of
-millions on Ethereum using sealed-bid second-price auctions with exactly this
-shape. Their answer to the offline bidder is protocol keepers, and Sealed now
-has one: `web/scripts/keeper.ts`. Griefing is not eliminated, and `MECHANISM.md`
+collateral, so it is priced rather than free. Fixed-rate lending protocols on
+Ethereum clear hundreds of millions using sealed-bid second-price auctions with
+exactly this shape. Their answer to the offline bidder is protocol keepers, and
+Sealed now has one: `web/scripts/keeper.ts`. Griefing is not eliminated, and `MECHANISM.md`
 says so.
 
 **"Timing leaks info."** Partly answered. Commitment and reveal timing is public

@@ -2,9 +2,9 @@
 ///
 ///   npx tsx scripts/keeper.ts ./payloads
 ///
-/// Borrowed from Term Finance, which runs sealed-bid second-price auctions on
-/// Ethereum at scale and has protocol keepers push the reveals rather than
-/// requiring every participant to appear inside the reveal window. Sealed needs
+/// Borrowed from the fixed-rate lending auctions that run on Ethereum at
+/// scale, where protocol keepers push the reveals rather than requiring every
+/// participant to appear inside the reveal window. Sealed needs
 /// no contract change to do the same: `reveal` verifies the salt against the
 /// commitment and never checks who sent the transaction, so anyone holding the
 /// payload can submit it and the result is identical.

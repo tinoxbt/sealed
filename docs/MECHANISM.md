@@ -171,15 +171,13 @@ is recorded here as a considered alternative rather than adopted mid-sprint.
 This mechanism is not a proposal. It runs in production, at scale, and has for
 years. Saying so is stronger than arguing it from theory.
 
-**Term Finance** clears fixed-rate loans on Ethereum through sealed-bid
+Fixed-rate lending protocols on Ethereum clear loans through sealed-bid
 second-price auctions, with several hundred million dollars of cumulative
-volume. Their documentation describes the same three decisions this file argues
-for: tenders "hidden from the public through a hashing algorithm until the
-market clears", a reveal period where "on-chain validation measures are taken to
-ensure that revealed prices match the hashes", and second pricing chosen "to
-reduce incentives for participants to tender any bids or offers at any price
-other than their true valuation". They cite US Treasury auctions as precedent,
-which is the same lineage.
+volume between them. Their published designs rest on the same three decisions
+this file argues for: bids are hidden behind a hash until the market clears,
+a reveal period validates on chain that revealed prices match those hashes, and
+second pricing is chosen to reduce the incentive to bid at prices participants
+do not mean.
 
 **ENS** ran Vickrey commit-reveal auctions for `.eth` names, with deposits
 forfeited by anyone who failed to reveal. That is this design's forfeiture rule,
