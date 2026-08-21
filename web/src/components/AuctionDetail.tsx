@@ -51,23 +51,23 @@ export function AuctionDetail({ address, a }: { address: string; a: AuctionSumma
       <header className="space-y-2">
         <div className="flex flex-wrap items-baseline gap-3">
           <h2 className="text-xl font-semibold">{listing?.title ?? "Untitled auction"}</h2>
-          <span className="rounded bg-neutral-800 px-2 py-0.5 text-xs">{a.phase}</span>
-          <span className="rounded bg-neutral-800 px-2 py-0.5 text-xs">
+          <span className="rounded bg-[var(--surface-2)] px-2 py-0.5 text-xs">{a.phase}</span>
+          <span className="rounded bg-[var(--surface-2)] px-2 py-0.5 text-xs">
             {a.kind === "FirstPrice" ? "First-price" : "Second-price"}
           </span>
         </div>
         {listing?.description && (
-          <p className="text-sm text-neutral-400">{listing.description}</p>
+          <p className="text-sm text-[var(--muted)]">{listing.description}</p>
         )}
         <p className="font-mono text-xs text-neutral-600 break-all">{address}</p>
       </header>
 
-      <p className="rounded border border-neutral-800 bg-neutral-900/60 p-3 text-sm text-neutral-300">
+      <p className="rounded border border-[var(--line)] bg-[var(--surface)]/60 p-3 text-sm text-[var(--muted)]">
         {PHASE_COPY[a.phase]}
         {countdown && (
-          <span className="mt-1 block text-neutral-400">
+          <span className="mt-1 block text-[var(--muted)]">
             {a.phase === "Bidding" ? "Bidding closes in " : "Reveal window closes in "}
-            <span className="font-medium text-neutral-100">{countdown}</span>
+            <span className="font-medium text-[var(--text)]">{countdown}</span>
           </span>
         )}
       </p>
@@ -104,9 +104,9 @@ export function AuctionDetail({ address, a }: { address: string; a: AuctionSumma
 
       {a.state === "Settled" && BigInt(a.winnerHandle) !== 0n && (
         <div className="space-y-1">
-          <p className="text-sm text-neutral-400">Winning entry</p>
+          <p className="text-sm text-[var(--muted)]">Winning entry</p>
           <p className="font-mono text-xs break-all">{a.winnerHandle}</p>
-          <p className="text-xs text-neutral-500">
+          <p className="text-xs text-[var(--faint)]">
             A hash, not a person. The contract stores no bidder address at any point, so this
             identifies the entry and nothing else.
           </p>
@@ -122,14 +122,14 @@ export function AuctionDetail({ address, a }: { address: string; a: AuctionSumma
 /// so explicitly is more useful than implying privacy the design does not claim.
 function Visibility({ settled }: { settled: boolean }) {
   return (
-    <details className="rounded border border-neutral-800 bg-neutral-900/40 p-3">
-      <summary className="cursor-pointer text-sm text-neutral-300">
+    <details className="rounded border border-[var(--line)] bg-[var(--surface)]/40 p-3">
+      <summary className="cursor-pointer text-sm text-[var(--muted)]">
         What anyone can see on chain
       </summary>
       <div className="mt-3 grid gap-4 sm:grid-cols-2 text-xs">
         <div>
           <p className="mb-1 font-medium text-neutral-200">Visible</p>
-          <ul className="space-y-1 text-neutral-400">
+          <ul className="space-y-1 text-[var(--muted)]">
             <li>That this auction exists, and its terms</li>
             <li>How many bids were committed, and when</li>
             <li>That the pool funded each one</li>
@@ -140,7 +140,7 @@ function Visibility({ settled }: { settled: boolean }) {
         </div>
         <div>
           <p className="mb-1 font-medium text-neutral-200">Hidden</p>
-          <ul className="space-y-1 text-neutral-400">
+          <ul className="space-y-1 text-[var(--muted)]">
             <li>Which person is behind any bid</li>
             <li>Every bid amount, until its owner reveals it</li>
             <li>Bid amounts that are never revealed, permanently</li>
@@ -148,7 +148,7 @@ function Visibility({ settled }: { settled: boolean }) {
           </ul>
         </div>
       </div>
-      <p className="mt-3 text-xs text-neutral-500">
+      <p className="mt-3 text-xs text-[var(--faint)]">
         Everything on this page is read from the contract, so everything on this page is
         public. The privacy is in what the contract was never told, not in what this page
         chooses to show.
@@ -160,7 +160,7 @@ function Visibility({ settled }: { settled: boolean }) {
 function Row({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
     <div className="border-b border-neutral-900 py-2">
-      <dt className="text-xs uppercase tracking-wide text-neutral-500">{label}</dt>
+      <dt className="text-xs uppercase tracking-wide text-[var(--faint)]">{label}</dt>
       <dd className="text-sm">{value}</dd>
       {note && <p className="mt-0.5 text-xs text-neutral-600">{note}</p>}
     </div>

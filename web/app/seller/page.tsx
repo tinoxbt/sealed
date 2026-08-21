@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import type { Call } from "starknet";
 import {
@@ -58,19 +57,16 @@ export default function SellerPage() {
       : 0n;
 
   return (
-    <main className="mx-auto max-w-2xl p-8 space-y-8">
+    <main className="mx-auto max-w-3xl px-5 py-10 space-y-8">
       <header className="space-y-1">
-        <Link href="/" className="text-sm text-neutral-500 hover:text-neutral-300">
-          Sealed
-        </Link>
         <h1 className="text-2xl font-semibold">Seller</h1>
-        <p className="text-sm text-neutral-400">
+        <p className="text-sm text-[var(--muted)]">
           Settle the auction, then collect the clearing price plus every forfeited collateral.
         </p>
       </header>
 
       {error && (
-        <p className="rounded border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">
+        <p className="rounded border border-red-900 bg-red-950/40 p-3 text-sm text-[var(--seal)]">
           {error}
         </p>
       )}
@@ -81,8 +77,8 @@ export default function SellerPage() {
 
       {auction?.phase === "AwaitingSettlement" && (
         <section className="space-y-3">
-          <h2 className="text-sm uppercase tracking-wide text-neutral-500">Settle</h2>
-          <p className="text-sm text-neutral-400">
+          <h2 className="text-sm uppercase tracking-wide text-[var(--faint)]">Settle</h2>
+          <p className="text-sm text-[var(--muted)]">
             The reveal window has closed. Settling records the winner and the clearing price and
             moves no money, so anyone can call it and there is nothing to gain by being first.
             Every payout happens afterwards through individual claims.
@@ -101,8 +97,8 @@ export default function SellerPage() {
 
       {auction?.phase === "Settled" && (
         <section className="space-y-3">
-          <h2 className="text-sm uppercase tracking-wide text-neutral-500">Collect proceeds</h2>
-          <p className="text-sm text-neutral-400">
+          <h2 className="text-sm uppercase tracking-wide text-[var(--faint)]">Collect proceeds</h2>
+          <p className="text-sm text-[var(--muted)]">
             {formatStrk(auction.clearingPrice)} STRK clearing price
             {auction.commitments > auction.revealed && (
               <>
@@ -113,30 +109,30 @@ export default function SellerPage() {
             )}
             . Payable once.
           </p>
-          <p className="text-sm text-neutral-400">
+          <p className="text-sm text-[var(--muted)]">
             The seller is authorised exactly like a bidder: the contract recomputes
             poseidon(secret, payout address) and requires it to match the handle fixed when the
             auction was created. There is no privileged seller path and no stored seller address.
           </p>
 
           <label className="block space-y-1">
-            <span className="text-sm text-neutral-400">Seller secret</span>
+            <span className="text-sm text-[var(--muted)]">Seller secret</span>
             <input
               value={secret}
               onChange={(e) => setSecret(e.target.value)}
               placeholder="0x..."
-              className="w-full rounded border border-neutral-800 bg-neutral-900 px-3 py-2 font-mono text-sm"
+              className="w-full rounded border border-[var(--line)] bg-[var(--surface)] px-3 py-2 font-mono text-sm"
             />
           </label>
           <label className="block space-y-1">
-            <span className="text-sm text-neutral-400">
+            <span className="text-sm text-[var(--muted)]">
               Payout address, exactly the one committed at creation
             </span>
             <input
               value={payout}
               onChange={(e) => setPayout(e.target.value)}
               placeholder="0x..."
-              className="w-full rounded border border-neutral-800 bg-neutral-900 px-3 py-2 font-mono text-sm"
+              className="w-full rounded border border-[var(--line)] bg-[var(--surface)] px-3 py-2 font-mono text-sm"
             />
           </label>
 
@@ -150,14 +146,14 @@ export default function SellerPage() {
             </button>
           )}
 
-          <p className="text-xs text-neutral-500">
+          <p className="text-xs text-[var(--faint)]">
             A different payout address will be rejected, because it changes the hash. That is
             what stops anyone who sees the secret in calldata from redirecting the money.
           </p>
         </section>
       )}
 
-      {txHash && <p className="font-mono text-xs text-neutral-400 break-all">submitted {txHash}</p>}
+      {txHash && <p className="font-mono text-xs text-[var(--muted)] break-all">submitted {txHash}</p>}
     </main>
   );
 }

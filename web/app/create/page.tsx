@@ -99,9 +99,9 @@ export default function CreatePage() {
 
   if (created) {
     return (
-      <main className="mx-auto max-w-2xl p-8 space-y-6">
+      <main className="mx-auto max-w-3xl px-5 py-10 space-y-6">
         <h1 className="text-2xl font-semibold">Auction created</h1>
-        <p className="text-neutral-400">
+        <p className="text-[var(--muted)]">
           A backup file was downloaded. It holds the only copy of your seller secret and the
           key to your payout account. Without both, the proceeds of this auction cannot be
           claimed by anyone, including you.
@@ -111,11 +111,11 @@ export default function CreatePage() {
           <Row label="transaction" value={created.txHash} />
           <Row label="payout" value={created.backup.payoutAddress} />
         </dl>
-        <p className="text-sm text-neutral-400">
+        <p className="text-sm text-[var(--muted)]">
           Bidders need the auction address. Send it to them, or point them at this app
           configured with it.
         </p>
-        <Link href="/seller" className="inline-block rounded bg-neutral-800 px-4 py-2">
+        <Link href="/seller" className="inline-block rounded bg-[var(--surface-2)] px-4 py-2">
           Go to the seller page
         </Link>
       </main>
@@ -123,20 +123,17 @@ export default function CreatePage() {
   }
 
   return (
-    <main className="mx-auto max-w-2xl p-8 space-y-8">
+    <main className="mx-auto max-w-3xl px-5 py-10 space-y-8">
       <header className="space-y-1">
-        <Link href="/" className="text-sm text-neutral-500 hover:text-neutral-300">
-          Sealed
-        </Link>
         <h1 className="text-2xl font-semibold">List an auction</h1>
-        <p className="text-sm text-neutral-400">
+        <p className="text-sm text-[var(--muted)]">
           Deploys your own auction contract from your wallet. Nobody else holds a key to it and
           there is no listing to approve.
         </p>
       </header>
 
       {error && (
-        <p className="rounded border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">{error}</p>
+        <p className="rounded border border-red-900 bg-red-950/40 p-3 text-sm text-[var(--seal)]">{error}</p>
       )}
 
       <section className="space-y-4">
@@ -153,7 +150,7 @@ export default function CreatePage() {
           hint="The lowest bid you will accept, and the clearing price if only one bidder reveals. Cannot exceed the collateral."
         />
         <fieldset className="space-y-2">
-          <legend className="text-sm text-neutral-400">What the winner pays</legend>
+          <legend className="text-sm text-[var(--muted)]">What the winner pays</legend>
           <label className="flex gap-3 items-start">
             <input
               type="radio"
@@ -163,7 +160,7 @@ export default function CreatePage() {
             />
             <span className="text-sm">
               <span className="block">Second-price (Vickrey)</span>
-              <span className="block text-neutral-500">
+              <span className="block text-[var(--faint)]">
                 The winner pays the runner-up's bid. Bidding your true value is the best
                 strategy, so bids tend to be honest. This is the default.
               </span>
@@ -178,7 +175,7 @@ export default function CreatePage() {
             />
             <span className="text-sm">
               <span className="block">First-price</span>
-              <span className="block text-neutral-500">
+              <span className="block text-[var(--faint)]">
                 The winner pays their own bid. Easier to explain, but bidders have a reason
                 to bid below what the item is worth to them.
               </span>
@@ -206,7 +203,7 @@ export default function CreatePage() {
           </button>
         )}
 
-        <p className="text-xs text-neutral-500">
+        <p className="text-xs text-[var(--faint)]">
           Deploying is a public transaction from your wallet. It shows that you created an
           auction, which is not private and does not need to be. What stays hidden is who bids
           and what they bid.
@@ -229,13 +226,13 @@ function Field({
 }) {
   return (
     <label className="block space-y-1">
-      <span className="block text-sm text-neutral-300">{label}</span>
+      <span className="block text-sm text-[var(--muted)]">{label}</span>
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded bg-neutral-900 border border-neutral-800 px-3 py-2"
+        className="w-full rounded bg-[var(--surface)] border border-[var(--line)] px-3 py-2"
       />
-      {hint && <span className="block text-xs text-neutral-500">{hint}</span>}
+      {hint && <span className="block text-xs text-[var(--faint)]">{hint}</span>}
     </label>
   );
 }
@@ -243,7 +240,7 @@ function Field({
 function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex gap-3">
-      <dt className="w-28 shrink-0 text-neutral-500">{label}</dt>
+      <dt className="w-28 shrink-0 text-[var(--faint)]">{label}</dt>
       <dd>{value}</dd>
     </div>
   );

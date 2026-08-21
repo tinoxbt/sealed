@@ -1,12 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
 import { readEntryStatus, type EntryStatus } from "../../src/lib/auction";
 import { buildRevealActions } from "../../src/lib/wallet";
 import type { BidBackup } from "../../src/lib/backup";
 import { parseStrk } from "../../src/lib/secrets";
 import { useWallet } from "../../src/lib/useWallet";
+import { AuctionContext } from "../../src/components/AuctionContext";
 import { BackupLoader } from "../../src/components/BackupLoader";
 import { WalletBar } from "../../src/components/WalletBar";
 
@@ -54,27 +54,26 @@ export default function RevealPage() {
   }
 
   return (
-    <main className="mx-auto max-w-2xl p-8 space-y-8">
+    <main className="mx-auto max-w-3xl px-5 py-10 space-y-8">
       <header className="space-y-1">
-        <Link href="/" className="text-sm text-neutral-500 hover:text-neutral-300">
-          Sealed
-        </Link>
         <h1 className="text-2xl font-semibold">Reveal your bid</h1>
-        <p className="text-sm text-neutral-400">
+        <p className="text-sm text-[var(--muted)]">
           Opens your commitment so it can win. A bid that is never revealed forfeits its
           collateral to the seller, so this step is not optional if you want your money back.
         </p>
       </header>
 
+      <AuctionContext />
+
       {error && (
-        <p className="rounded border border-red-900 bg-red-950/40 p-3 text-sm text-red-300">{error}</p>
+        <p className="rounded border border-red-900 bg-red-950/40 p-3 text-sm text-[var(--seal)]">{error}</p>
       )}
 
       {!backup ? (
         <BackupLoader onLoad={loadBackup} />
       ) : (
         <section className="space-y-5">
-          <dl className="space-y-1 font-mono text-xs text-neutral-400 break-all">
+          <dl className="space-y-1 font-mono text-xs text-[var(--muted)] break-all">
             <Row label="bid" value={`${backup.bidAmountStrk} STRK`} />
             <Row label="claim handle" value={backup.claimHandle} />
             <Row label="status" value={status ?? "reading"} />
@@ -128,12 +127,12 @@ export default function RevealPage() {
           )}
 
           {txHash && (
-            <p className="font-mono text-xs text-neutral-400 break-all">
+            <p className="font-mono text-xs text-[var(--muted)] break-all">
               submitted {txHash}
             </p>
           )}
 
-          <button className="text-sm text-neutral-500 underline" onClick={() => setBackup(null)}>
+          <button className="text-sm text-[var(--faint)] underline" onClick={() => setBackup(null)}>
             Load a different bid
           </button>
         </section>
@@ -155,6 +154,6 @@ function Note({ tone, children }: { tone: "amber" | "neutral"; children: React.R
   const cls =
     tone === "amber"
       ? "border-amber-900 bg-amber-950/30 text-amber-100/80"
-      : "border-neutral-800 bg-neutral-900 text-neutral-400";
+      : "border-[var(--line)] bg-[var(--surface)] text-[var(--muted)]";
   return <div className={`rounded border p-3 text-sm ${cls}`}>{children}</div>;
 }

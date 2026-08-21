@@ -34,26 +34,26 @@ export function BackupLoader({ onLoad }: { onLoad: (b: BidBackup) => void }) {
       {stored && (
         <button
           onClick={() => onLoad(stored)}
-          className="w-full rounded border border-neutral-800 bg-neutral-900 p-3 text-left hover:border-neutral-700"
+          className="w-full rounded border border-[var(--line)] bg-[var(--surface)] p-3 text-left hover:border-[var(--line-bright)]"
         >
           <span className="block text-sm">Use the bid saved in this browser</span>
-          <span className="block font-mono text-xs text-neutral-500 break-all">
+          <span className="block font-mono text-xs text-[var(--faint)] break-all">
             {stored.claimHandle}
           </span>
         </button>
       )}
       <label className="block space-y-1">
-        <span className="text-sm text-neutral-400">
+        <span className="text-sm text-[var(--muted)]">
           {stored ? "Or load a backup file" : "Load your backup file"}
         </span>
         <input
           type="file"
           accept="application/json"
           onChange={(e) => e.target.files?.[0] && readFile(e.target.files[0])}
-          className="block w-full text-sm text-neutral-400 file:mr-3 file:rounded file:border-0 file:bg-neutral-800 file:px-3 file:py-2 file:text-neutral-200"
+          className="block w-full text-sm text-[var(--muted)] file:mr-3 file:rounded file:border-0 file:bg-[var(--surface-2)] file:px-3 file:py-2 file:text-neutral-200"
         />
       </label>
-      {error && <p className="text-sm text-red-300">{error}</p>}
+      {error && <p className="text-sm text-[var(--seal)]">{error}</p>}
     </div>
   );
 }

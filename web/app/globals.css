@@ -1,3 +1,60 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * Sealed's palette is deliberately not the usual crypto purple. The product is
+ * named after a wax seal, so the one accent is sealing-wax red against cold
+ * near-black. Data is monospace, prose is not: an address and a bid amount are
+ * things you compare character by character, and a sans face makes that harder.
+ */
+:root {
+  --bg: #08080a;
+  --surface: #101014;
+  --surface-2: #16161c;
+  --line: #23232b;
+  --line-bright: #34343f;
+  --text: #ecedf1;
+  --muted: #8b8b98;
+  --faint: #5c5c68;
+  --seal: #e04b3a;
+  --seal-dim: #7d2a20;
+  --good: #46b76a;
+  --warn: #d9a441;
+}
+
+html { color-scheme: dark; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+}
+
+/* A faint grid, so a dark page does not read as an empty one. */
+.grid-bg {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.022) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.022) 1px, transparent 1px);
+  background-size: 56px 56px;
+}
+
+.seal-glow {
+  background: radial-gradient(60% 50% at 50% 0%, rgba(224, 75, 58, 0.16), transparent 70%);
+}
+
+@layer components {
+  .card { @apply rounded-xl border border-[var(--line)] bg-[var(--surface)]; }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium
+           transition-colors disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+  .btn-primary { @apply btn bg-[var(--seal)] text-white hover:bg-[#c8412f]; }
+  .btn-ghost { @apply btn border border-[var(--line-bright)] hover:bg-[var(--surface-2)]; }
+  .input {
+    @apply w-full rounded-lg border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2.5
+           text-sm outline-none focus:border-[var(--line-bright)];
+  }
+  .label { @apply block text-xs font-medium uppercase tracking-wider text-[var(--faint)]; }
+  .mono { @apply font-mono tabular-nums; }
+  .pill { @apply inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium; }
+}

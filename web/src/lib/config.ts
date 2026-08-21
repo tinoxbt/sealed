@@ -30,6 +30,21 @@ function resolveAuction(): string {
 
 export const AUCTION_ADDRESS = resolveAuction();
 
+/// The address the app falls back to when nothing is pinned. Exposed so the UI
+/// can offer a way out when the pinned auction turns out to be unreadable.
+export const DEFAULT_AUCTION_ADDRESS =
+  process.env.NEXT_PUBLIC_AUCTION_ADDRESS ?? "0x076a5480f7359b8a8db0245c603c78e108a89442fb3b71aea2a3e7cc976b133d";
+
+/// Forget the pinned auction and go back to the default.
+///
+/// Without this a browser that once visited an auction from an older contract
+/// is stuck there: every read fails, and the pin is invisible from the UI.
+export function clearPinnedAuction(): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem("sealed:active");
+  window.location.href = window.location.pathname;
+}
+
 /// The declared auction class. A seller deploys an instance of it from their
 /// own wallet through the Universal Deployer, so listing an auction needs no
 /// privileged party and no backend.

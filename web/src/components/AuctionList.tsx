@@ -40,31 +40,31 @@ export function AuctionList() {
   }, []);
 
   if (error !== null) {
-    return <p className="text-sm text-red-300">{error}</p>;
+    return <p className="text-sm text-[var(--seal)]">{error}</p>;
   }
 
   if (auctions === null) {
-    return <p className="text-sm text-neutral-500">Loading auctions...</p>;
+    return <p className="text-sm text-[var(--faint)]">Loading auctions...</p>;
   }
 
   if (auctions.length === 0) {
-    return <p className="text-sm text-neutral-500">No auctions found.</p>;
+    return <p className="text-sm text-[var(--faint)]">No auctions found.</p>;
   }
 
   const now = Date.now() / 1000;
 
   return (
-    <section className="rounded border border-neutral-800 bg-neutral-900/50 divide-y divide-neutral-800">
+    <section className="rounded border border-[var(--line)] bg-[var(--surface)] divide-y divide-[var(--line)]">
       {auctions.map((auction) => {
         const current = auction.address.toLowerCase() === AUCTION_ADDRESS.toLowerCase();
         const content = (
           <>
             <div className="flex items-baseline justify-between gap-4">
               <span className="font-mono text-sm">{shortAddress(auction.address)}</span>
-              <span className="text-xs text-neutral-500">{phaseOf(auction, now)}</span>
+              <span className="text-xs text-[var(--faint)]">{phaseOf(auction, now)}</span>
             </div>
             <div className="mt-1 flex items-baseline justify-between gap-4 text-sm">
-              <span className="text-neutral-500">collateral</span>
+              <span className="text-[var(--faint)]">collateral</span>
               <span className="font-mono">{formatStrk(auction.collateral)} STRK</span>
             </div>
           </>
@@ -73,7 +73,7 @@ export function AuctionList() {
         if (current) {
           return (
             <div key={auction.address} className="p-4">
-              <div className="mb-2 text-xs font-medium text-neutral-400">Current auction</div>
+              <div className="mb-2 text-xs font-medium text-[var(--muted)]">Current auction</div>
               {content}
             </div>
           );
@@ -84,7 +84,7 @@ export function AuctionList() {
           <a
             key={auction.address}
             href={`?a=${auction.address}`}
-            className="block p-4 hover:bg-neutral-800/50"
+            className="block p-4 hover:bg-[var(--surface-2)]/50"
           >
             {content}
           </a>
