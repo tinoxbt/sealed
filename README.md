@@ -34,7 +34,7 @@ anyone else has to point it out.
 | Reveal by selective disclosure of viewing key material | No. Reveal opens a hash preimage |
 | Revealed amounts must match or the bid is forfeit | Yes |
 | Force-reveal by threshold auditing when a bidder is offline | No. Forfeiture prices silence, and a keeper reveals for anyone who opts in |
-| First-price, Vickrey and multi-unit on one contract | Vickrey only |
+| First-price, Vickrey and multi-unit on one contract | Vickrey and first-price, chosen at creation. Not multi-unit |
 
 ### Why the specified design was not built
 

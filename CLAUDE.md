@@ -36,7 +36,7 @@ Do not change these without an explicit instruction. They are scope decisions, n
 | Privacy | Privacy Wallet API v0.10.3 via `WalletAccountV6`. The wallet proves. Sealed hosts no prover |
 | Frontend | Next.js 14 App Router, TypeScript, Tailwind |
 | Chain access | starknet.js |
-| Off-chain | Supabase Postgres, listing metadata and reminders only |
+| Off-chain | None. Discovery is chain events, state is the contract, secrets stay client-side |
 
 Versions are pinned. Do not bump Scarb, the Cairo compiler, snforge, or OpenZeppelin Cairo during the sprint.
 
@@ -73,7 +73,7 @@ main wallet -> shield -> pool
 - Persist to localStorage keyed by auction id, and force a JSON backup download immediately after commit, before the confirmation screen. Not skippable.
 - Seal the secrets into the on-chain backup blob at commit, under both a passphrase, when the bidder set one, and a generated recovery code. Either credential alone must open it, so forgetting one is survivable. Every blob is the same length whatever was used to seal it, and unused credential slots hold random bytes: a shorter blob, or a recognisably empty slot, would say how the bidder stored their secrets.
 - The file is no longer the only copy, but it is still the fastest one. Losing the file, the passphrase and the recovery code together still means the funds are unrecoverable by anyone.
-- The contract is the only source of truth for auction state. Supabase is metadata and reminders. If Supabase is down, the auction still settles.
+- The contract is the only source of truth for auction state. There is no backend, and adding one that learns which address browses which auction would rebuild the link the pool exists to break. Listing metadata and reveal reminders are what a backend would add, and neither is built.
 - Warn users to shield well ahead of an auction. Shielding immediately before committing creates a timing link the pool cannot hide.
 - Reveal and claim go through the pool, never `account.execute`. A direct call puts the connected wallet beside the bid amount and the claim handle, which is exactly what the commit was built to prevent. Both carry a one-unit self-transfer, because the pool rejects a transaction that spends no matured note and an invoke spends nothing.
 - Do not tell users to reveal from a separate account. That was advice for a leak that no longer exists, and following it now is worse than ignoring it: a fresh account funded from a main wallet recreates the link it was meant to avoid.

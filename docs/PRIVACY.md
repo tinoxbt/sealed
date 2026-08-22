@@ -2,7 +2,7 @@
 
 What Sealed hides, what it does not, and where it depends on someone else.
 
-Read this before deciding whether Sealed is appropriate for what you are auctioning. It is written to be believed rather than to be impressive, so the leaks are stated as plainly as the guarantees. Every claim here was checked against the deployed contract or the protocol source, not inferred from a diagram.
+Read this before deciding whether Sealed is appropriate for what you are auctioning. It is written to be believed rather than to be impressive, so the leaks are stated as plainly as the guarantees. Every claim here was checked against the deployed contract or the protocol source, not inferred from a diagram. Where a guarantee rests on a path that has not yet executed on a network, this document says so at that point rather than in a footnote.
 
 ---
 
@@ -88,7 +88,18 @@ Independent of the pool, and true even if every privacy assumption above fails:
 - **The salt published at reveal cannot claim anything.** `bid_salt` and `claim_secret` are independent. If one value did both jobs, anyone watching the reveal phase could drain every losing bidder.
 - **Settle moves no money.** It records the winner and clearing price, and all value leaves through individual claims.
 
-These are enforced by tests, including on a live network. See `docs/ARCHITECTURE.md` section 6 for the invariant list.
+These are enforced by 57 contract tests, and the full lifecycle has run on Sepolia
+through the plain entrypoints: commit, reveal, settle, claim and claim_proceeds,
+with the conservation of funds checked on chain at each step.
+
+**The pool-driven path has not run on a network.** Commit through the pool has;
+reveal and claim through it have not. Their logic is shared with the plain
+entrypoints and covered by the same tests, but "tested" and "executed on a live
+network" are different claims and this document will not blur them. Until that
+changes, the identity guarantee for reveal and claim is a design property rather
+than a demonstrated one.
+
+See `docs/ARCHITECTURE.md` section 6 for the invariant list.
 
 ---
 
@@ -108,7 +119,7 @@ For bidders:
 
 1. Shield well ahead of the auction, ideally days, never minutes.
 2. Bid when others are active, not alone at 4am.
-3. Reveal from an account with no connection to the one you shielded from, or have someone else submit it. Reveal is permissionless precisely so this is possible.
+3. Reveal through the app, which routes it through the pool. Do not reveal from a "fresh" account you funded yourself: that was advice for an earlier design, and following it now is worse than ignoring it, because an account funded from your main wallet rebuilds exactly the link it was meant to break.
 4. Re-shield the payout rather than sweeping it somewhere that identifies you.
 
 For sellers:

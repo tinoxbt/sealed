@@ -103,7 +103,7 @@ These do not change during the sprint.
 | Custody | Ordinary ERC20 held by the auction contract, funded by a pool `withdraw` plus `privacy_invoke` in one transaction. |
 | Frontend | Next.js 14 App Router, TypeScript, Tailwind |
 | Chain access | starknet.js |
-| Off-chain store | Supabase Postgres, listing metadata and reveal reminders only |
+| Off-chain store | None. Discovery reads `AuctionCreated` events, state is the contract, secrets stay client-side. A server that knew which address browsed which auction would rebuild the link the pool exists to break |
 | Networks | Sepolia for development, mainnet for the final deployment |
 | Repo | Single public monorepo, Apache 2.0 |
 
@@ -311,21 +311,28 @@ That removes the visible collateral transfers entirely. It is an upgrade, not a 
 
 ```
 app/
-  page.tsx                    Live and recent auctions
-  auction/[id]/page.tsx       Bid, reveal, settle, claim
-  create/page.tsx             Seller listing form
-lib/
-  contract.ts                 Typed contract calls
-  privacy.ts                  SDK wrapper: register, subaccount, shield, transfer, scan
-  commitment.ts               Poseidon commitments, secret generation
-  storage.ts                  Secret persistence and export
-components/
-  BidForm, RevealPanel, AuctionClock, PrivacyWarning, ClaimPanel
+  page.tsx                    Landing: mechanism, live auctions, privacy model
+  auctions/page.tsx           Every auction, discovered from chain events
+  bid/page.tsx                Bid, and the shield step that precedes it
+  reveal/page.tsx             Open a commitment
+  claim/page.tsx              Take a payout
+  seller/page.tsx             Settle, and claim proceeds
+  create/page.tsx             Deploy an auction from the seller's own wallet
+  recover/page.tsx            Rebuild secrets from the on-chain backup
+src/lib/
+  auction.ts                  Contract reads and calldata builders
+  wallet.ts                   Pool action composition for commit, reveal, claim
+  vault.ts                    Envelope encryption of the backup blob
+  recovery.ts                 Blind trial decryption over an auction's blobs
+  discovery.ts                Auction discovery from AuctionCreated events
+  payout.ts                   Counterfactual payout account derivation
+  backup.ts                   Local persistence and the forced file download
+  commitment.ts               Poseidon, byte-identical to Cairo
 ```
 
-Both secrets are generated client-side with `crypto.getRandomValues`, never transmitted, persisted to localStorage keyed by auction id, and written into a single downloadable JSON backup pushed immediately after commit, before the confirmation screen. Not skippable. The reveal window shows a live countdown, and Supabase drives an optional email reminder.
+Both secrets are generated client-side with `crypto.getRandomValues`, never transmitted, persisted to localStorage keyed by auction id, and written into a single downloadable JSON backup pushed immediately after commit, before the confirmation screen. Not skippable. They are also sealed into the on-chain backup blob, so a lost file is survivable. The reveal window shows a live countdown.
 
-The contract is the only source of truth for auction state. Supabase holds titles, descriptions, images, and reminder subscriptions. If Supabase is down, the auction still settles.
+The contract is the only source of truth for auction state. There is no off-chain store: auctions are found by scanning the event each one emits at construction, so nothing can be filtered, taken down, or fall over during judging. Listing metadata and reveal reminders are the two things a backend would add, and neither is built.
 
 ---
 
