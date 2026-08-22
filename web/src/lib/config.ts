@@ -15,7 +15,7 @@
 /// client-side route change, because this value is captured at module init.
 /// Auction links are therefore plain anchors, not next/link.
 function resolveAuction(): string {
-  const fallback = process.env.NEXT_PUBLIC_AUCTION_ADDRESS ?? "0x076a5480f7359b8a8db0245c603c78e108a89442fb3b71aea2a3e7cc976b133d";
+  const fallback = process.env.NEXT_PUBLIC_AUCTION_ADDRESS ?? "0x01fdad69852ba0ae7de900aaa6165b015010f493c5a5d5466bc6a8e580c05d02";
   if (typeof window === "undefined") return fallback;
 
   const fromUrl = new URLSearchParams(window.location.search).get("a");
@@ -33,7 +33,7 @@ export const AUCTION_ADDRESS = resolveAuction();
 /// The address the app falls back to when nothing is pinned. Exposed so the UI
 /// can offer a way out when the pinned auction turns out to be unreadable.
 export const DEFAULT_AUCTION_ADDRESS =
-  process.env.NEXT_PUBLIC_AUCTION_ADDRESS ?? "0x076a5480f7359b8a8db0245c603c78e108a89442fb3b71aea2a3e7cc976b133d";
+  process.env.NEXT_PUBLIC_AUCTION_ADDRESS ?? "0x01fdad69852ba0ae7de900aaa6165b015010f493c5a5d5466bc6a8e580c05d02";
 
 /// Forget the pinned auction and go back to the default.
 ///
@@ -53,7 +53,7 @@ export function clearPinnedAuction(): void {
 /// deploys an older contract that looks identical from the outside.
 export const AUCTION_CLASS_HASH =
   process.env.NEXT_PUBLIC_AUCTION_CLASS_HASH ??
-  "0x0766f2dc9cec51dd1e884dc0e565733f159c3b1b29f2ba16cd4f174fec3f602a";
+  "0x03f857b75682d33cdcadae8f584910ccabea86b9037bc1225d15d0d0e5914a19";
 
 /// STRK. Same address on Sepolia and mainnet.
 export const TOKEN_ADDRESS =
