@@ -70,7 +70,9 @@ main wallet -> shield -> pool
 
 - Both secrets generated as 31 random bytes from `crypto.getRandomValues`, client-side, never transmitted.
 - The payout account must be derived during the bid flow, before committing, because its address is hashed into `claim_handle`. It is a counterfactual OpenZeppelin account: the address is computed now and deployed only when its owner moves the funds on. Back up the private key, the salt and the class hash with the secrets, because losing any of them makes the address undeployable and the payout unreachable.
-- Persist to localStorage keyed by auction id, and force a JSON backup download immediately after commit, before the confirmation screen. Not skippable. Losing `claim_secret` means funds are unrecoverable.
+- Persist to localStorage keyed by auction id, and force a JSON backup download immediately after commit, before the confirmation screen. Not skippable.
+- Seal the secrets into the on-chain backup blob at commit, under both a passphrase, when the bidder set one, and a generated recovery code. Either credential alone must open it, so forgetting one is survivable. Every blob is the same length whatever was used to seal it, and unused credential slots hold random bytes: a shorter blob, or a recognisably empty slot, would say how the bidder stored their secrets.
+- The file is no longer the only copy, but it is still the fastest one. Losing the file, the passphrase and the recovery code together still means the funds are unrecoverable by anyone.
 - The contract is the only source of truth for auction state. Supabase is metadata and reminders. If Supabase is down, the auction still settles.
 - Warn users to shield well ahead of an auction. Shielding immediately before committing creates a timing link the pool cannot hide.
 - Reveal and claim go through the pool, never `account.execute`. A direct call puts the connected wallet beside the bid amount and the claim handle, which is exactly what the commit was built to prevent. Both carry a one-unit self-transfer, because the pool rejects a transaction that spends no matured note and an invoke spends nothing.

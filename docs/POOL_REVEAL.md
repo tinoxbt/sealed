@@ -2,10 +2,10 @@
 
 **Status: adopted 16 August 2026, implemented, and not yet executed on a network.**
 
-`privacy_invoke` now multiplexes commit, reveal and claim. 40 contract tests
+`privacy_invoke` now multiplexes commit, reveal and claim. 57 contract tests
 pass. The frontend composes the actions. What remains unproven is the part no
 test can cover: that the wallet assembles a value-free invoke and the proving
-service accepts it. The first live reveal is the test. Nothing in `contracts/` or `web/` implements this. Adopting it changes the `privacy_invoke` calldata shape, so it requires a redeploy and a frontend change together.
+service accepts it. The first live reveal is the test.
 
 Written 16 August 2026, day 3, with the contract complete, the Sepolia lifecycle verified, and mainnet not yet attempted.
 
