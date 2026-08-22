@@ -13,7 +13,8 @@
     "payout": "tsx scripts/check-payout.ts",
     "create": "tsx scripts/check-create.ts",
     "discovery": "tsx scripts/check-discovery.ts",
-    "vault": "tsx scripts/check-vault.ts"
+    "vault": "tsx scripts/check-vault.ts",
+    "backup:onchain": "tsx scripts/check-backup-onchain.ts"
   },
   "dependencies": {
     "@starknet-io/get-starknet-discovery": "^6.0.2",
