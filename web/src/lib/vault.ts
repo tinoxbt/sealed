@@ -24,7 +24,11 @@ const SALT = 16;
 const NONCE = 12;
 const TAG = 16;
 const SECRET_BYTES = 32;
-const PAYLOAD = SECRET_BYTES * 3; // bid salt, claim secret, payout key
+// Four values, not three. The bid amount belongs here: reveal recomputes
+// poseidon(amount_low, amount_high, bid_salt, claim_handle) and rejects a
+// mismatch, so secrets without the amount recover a bid nobody can reveal.
+// Four still fits in BACKUP_WORDS with room over, so this costs no redeploy.
+const PAYLOAD = SECRET_BYTES * 4; // amount, bid salt, claim secret, payout key
 const WRAP = NONCE + SECRET_BYTES + TAG; // 60
 
 const OFF_SALT = 0;
@@ -35,6 +39,9 @@ const SLOT_COUNT = 3;
 const OFF_PADDING = OFF_SLOTS + WRAP * SLOT_COUNT; // 320
 
 export type Secrets = {
+  /// The bid, in token base units. Without it the commitment cannot be
+  /// reopened, and the collateral is forfeited at the deadline.
+  amount: bigint;
   bidSalt: bigint;
   claimSecret: bigint;
   payoutPrivateKey: bigint;
@@ -151,9 +158,10 @@ export async function sealBackup(s: Secrets, c: Credentials): Promise<string[]> 
   const dataKey = await subtle().importKey("raw", dataKeyRaw, "AES-GCM", false, ["encrypt"]);
 
   const payload = new Uint8Array(PAYLOAD);
-  payload.set(bytesFromFelt(s.bidSalt), 0);
-  payload.set(bytesFromFelt(s.claimSecret), SECRET_BYTES);
-  payload.set(bytesFromFelt(s.payoutPrivateKey), SECRET_BYTES * 2);
+  payload.set(bytesFromFelt(s.amount), 0);
+  payload.set(bytesFromFelt(s.bidSalt), SECRET_BYTES);
+  payload.set(bytesFromFelt(s.claimSecret), SECRET_BYTES * 2);
+  payload.set(bytesFromFelt(s.payoutPrivateKey), SECRET_BYTES * 3);
 
   const payloadNonce = blob.subarray(OFF_PAYLOAD_NONCE, OFF_PAYLOAD_NONCE + NONCE);
   const sealed = new Uint8Array(
@@ -209,9 +217,10 @@ export async function openBackup(felts: string[], c: Credentials): Promise<Secre
       ),
     );
     return {
-      bidSalt: feltFromBytes(opened.subarray(0, SECRET_BYTES)),
-      claimSecret: feltFromBytes(opened.subarray(SECRET_BYTES, SECRET_BYTES * 2)),
-      payoutPrivateKey: feltFromBytes(opened.subarray(SECRET_BYTES * 2, SECRET_BYTES * 3)),
+      amount: feltFromBytes(opened.subarray(0, SECRET_BYTES)),
+      bidSalt: feltFromBytes(opened.subarray(SECRET_BYTES, SECRET_BYTES * 2)),
+      claimSecret: feltFromBytes(opened.subarray(SECRET_BYTES * 2, SECRET_BYTES * 3)),
+      payoutPrivateKey: feltFromBytes(opened.subarray(SECRET_BYTES * 3, SECRET_BYTES * 4)),
     };
   }
   return null;

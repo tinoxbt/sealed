@@ -41,7 +41,9 @@ const acct = JSON.parse(
 )["alpha-sepolia"]["sealed-deployer"];
 const account = new Account({ provider, address: acct.address, signer: acct.private_key });
 
+const amount = 300000000000000000n; // 0.3 STRK
 const secrets = {
+  amount,
   bidSalt: randomFelt(),
   claimSecret: randomFelt(),
   payoutPrivateKey: randomFelt(),
@@ -49,7 +51,6 @@ const secrets = {
 const passphrase = `onchain-check-${Date.now()}`;
 const payoutAddress = randomFelt();
 const handle = claimHandle(secrets.claimSecret, payoutAddress);
-const amount = 300000000000000000n; // 0.3 STRK
 const commitment = bidCommitment(
   { low: amount & ((1n << 128n) - 1n), high: amount >> 128n },
   secrets.bidSalt,
@@ -93,6 +94,7 @@ assert(
 // The real test: recover with the passphrase alone.
 const opened = await openBackup(words, { passphrase });
 assert(opened !== null, "the passphrase opened the blob read from chain");
+assert(opened!.amount === secrets.amount, "the bid amount came back, so the entry can actually be revealed");
 assert(opened!.bidSalt === secrets.bidSalt, "bid salt recovered from chain");
 assert(opened!.claimSecret === secrets.claimSecret, "claim secret recovered from chain");
 assert(opened!.payoutPrivateKey === secrets.payoutPrivateKey, "payout key recovered from chain");

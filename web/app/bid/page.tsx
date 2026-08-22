@@ -154,6 +154,10 @@ export default function BidPage() {
       // bid from chain if the file and this browser are both gone.
       const blob = await sealBackup(
         {
+          // The amount matters as much as the secrets: reveal recomputes the
+          // commitment over it, so a backup without it recovers a bid that can
+          // never be opened.
+          amount: bidAmount,
           bidSalt,
           claimSecret,
           payoutPrivateKey: payout.privateKey,

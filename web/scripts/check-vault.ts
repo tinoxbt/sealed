@@ -22,6 +22,7 @@ function randomFelt(): bigint {
 }
 
 const secrets = {
+  amount: 1234567890123456789n,
   bidSalt: randomFelt(),
   claimSecret: randomFelt(),
   payoutPrivateKey: randomFelt(),
@@ -38,6 +39,7 @@ assert(blob.every((f) => BigInt(f) >= 0n), "every word is a valid felt");
 // The whole point: either credential alone recovers everything.
 const byPass = await openBackup(blob, { passphrase });
 assert(byPass !== null, "the passphrase alone opens the blob");
+assert(byPass!.amount === secrets.amount, "the bid amount survives, without which no reveal is possible");
 assert(byPass!.bidSalt === secrets.bidSalt, "bid salt survives the round trip");
 assert(byPass!.claimSecret === secrets.claimSecret, "claim secret survives the round trip");
 assert(byPass!.payoutPrivateKey === secrets.payoutPrivateKey, "payout key survives the round trip");
