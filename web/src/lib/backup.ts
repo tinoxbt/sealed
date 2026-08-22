@@ -13,6 +13,9 @@ export type BidBackup = {
   payoutAddress: string;
   payoutPrivateKey: string;
   payoutSalt: string;
+  /// Written down by the bidder. It opens the on-chain blob if this file and
+  /// the passphrase are both gone.
+  recoveryCode?: string;
   accountClassHash: string;
 };
 

@@ -10,6 +10,7 @@ import { bidCommitment, claimHandle } from "../../src/commitment";
 import { AUCTION_ADDRESS, DEFAULT_AUCTION_ADDRESS, clearPinnedAuction } from "../../src/lib/config";
 import { derivePayoutAccount } from "../../src/lib/payout";
 import { formatStrk, parseStrk, randomFelt, splitU256, toHex } from "../../src/lib/secrets";
+import { generateRecoveryCode, sealBackup } from "../../src/lib/vault";
 import { useWallet } from "../../src/lib/useWallet";
 import {
   NotRegistered,
@@ -27,6 +28,7 @@ export default function BidPage() {
   const [auction, setAuction] = useState<AuctionSummary | null>(null);
   const [amount, setAmount] = useState("0.5");
   const [shieldAmount, setShieldAmount] = useState("2");
+  const [passphrase, setPassphrase] = useState("");
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [submitted, setSubmitted] = useState<Submitted | null>(null);
@@ -119,6 +121,10 @@ export default function BidPage() {
       // the address that was committed.
       const payout = derivePayoutAccount(randomFelt());
 
+      // Generated whether or not a passphrase was set, so there is always at
+      // least one credential that can open the on-chain blob.
+      const recoveryCode = generateRecoveryCode();
+
       const handle = claimHandle(claimSecret, BigInt(payout.address));
       const commitment = bidCommitment(splitU256(bidAmount), bidSalt, handle);
 
@@ -135,6 +141,7 @@ export default function BidPage() {
         payoutAddress: payout.address,
         payoutPrivateKey: toHex(payout.privateKey),
         payoutSalt: payout.salt,
+        recoveryCode,
         accountClassHash: (await import("../../src/lib/config")).ACCOUNT_CLASS_HASH,
       };
 
@@ -143,14 +150,19 @@ export default function BidPage() {
       persist(backup);
 
       setBusy("Waiting for the wallet");
-      // Empty, deliberately. The contract accepts an encrypted backup blob
-      // here, but the client-side encryption that would fill it is not built
-      // yet. Sending random padding would make the interface look like it has
-      // a recovery path it does not have, and a bidder who believed that and
-      // deleted their backup file would lose everything. The downloaded file
-      // remains the only copy until the blob is real.
+      // Sealed under both credentials, so either one alone can recover this
+      // bid from chain if the file and this browser are both gone.
+      const blob = await sealBackup(
+        {
+          bidSalt,
+          claimSecret,
+          payoutPrivateKey: payout.privateKey,
+        },
+        { passphrase: passphrase || undefined, recoveryCode },
+      );
+
       const res = await w.account.strk20InvokeTransaction(
-        buildBidActions(auction.collateral, toHex(commitment), toHex(handle), []),
+        buildBidActions(auction.collateral, toHex(commitment), toHex(handle), blob),
       );
 
       // Not skippable, and before the confirmation screen. Losing claim_secret
@@ -207,6 +219,16 @@ export default function BidPage() {
           A backup file was downloaded. It holds the only copy of your claim secret.
           Without it the collateral cannot be recovered by anyone, including the seller.
         </p>
+        <div className="rounded-lg border border-[var(--seal)]/40 bg-[var(--seal)]/[0.07] p-4 space-y-2">
+          <p className="font-medium">Write this recovery code down</p>
+          <p className="mono text-lg tracking-wider break-all">{submitted.backup.recoveryCode}</p>
+          <p className="text-sm text-[var(--muted)] leading-relaxed">
+            It opens the copy of your secrets stored on chain. It is in the downloaded file
+            too, so if you keep that file safe you do not need this. If you lose the file and
+            never set a passphrase, this code is the only way to recover the bid.
+          </p>
+        </div>
+
         <dl className="space-y-2 text-sm font-mono break-all">
           <Row label="transaction" value={submitted.txHash} />
           <Row label="claim handle" value={submitted.backup.claimHandle} />
@@ -317,9 +339,26 @@ export default function BidPage() {
               {busy || "Place bid"}
             </button>
           </div>
+          <label className="space-y-1.5 block">
+            <span className="label">Recovery passphrase, optional</span>
+            <input
+              type="password"
+              className="input"
+              value={passphrase}
+              onChange={(e) => setPassphrase(e.target.value)}
+              placeholder="something you will remember"
+            />
+            <span className="block text-xs text-[var(--faint)] leading-relaxed">
+              Your secrets are encrypted and stored on chain with the bid. A passphrase lets you
+              recover them with nothing but this site, no file and no browser history. Leave it
+              blank and the recovery code on the next screen becomes the only way back.
+            </span>
+          </label>
+
           <p className="text-xs text-[var(--faint)] leading-relaxed">
             Placing a bid escrows the collateral, not your bid. Both secrets are generated here
-            and never leave this browser, and a backup file downloads before the confirmation.
+            and never leave this browser unencrypted, and a backup file downloads before the
+            confirmation.
           </p>
 
           <div className="border-t border-[var(--line)] pt-5 space-y-2">

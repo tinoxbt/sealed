@@ -12,7 +12,8 @@
     "vectors:emit": "tsc -p tsconfig.scripts.json && node dist/scripts/emit-cairo-vectors.js",
     "payout": "tsx scripts/check-payout.ts",
     "create": "tsx scripts/check-create.ts",
-    "discovery": "tsx scripts/check-discovery.ts"
+    "discovery": "tsx scripts/check-discovery.ts",
+    "vault": "tsx scripts/check-vault.ts"
   },
   "dependencies": {
     "@starknet-io/get-starknet-discovery": "^6.0.2",
